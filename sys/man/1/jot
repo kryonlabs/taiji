@@ -1,0 +1,28 @@
+.TH JOT 1
+.SH NAME
+jot \- graphical scratch text editor
+.SH SYNOPSIS
+.B jot
+.SH DESCRIPTION
+.I Jot
+is a small graphical text editor.
+It uses the draw and frame libraries, supports mouse and keyboard text
+editing, and can send selections to the plumber.
+.PP
+Button 2 opens a command menu.
+The
+.B plumb
+command sends the selected text, or nearby text if there is no
+selection, to the plumber.
+.SH SOURCE
+.B /sys/src/cmd/jot
+.SH SEE ALSO
+.IR acme (1),
+.IR sam (1),
+.IR plumb (6)
+.SH HISTORY
+.I Jot
+was imported from
+.B git://shithub.us/aap/jot
+at commit
+.BR b281eb93bd34cca00bfe31f0bb5fb4a7b4eb8c76 .

@@ -14,13 +14,11 @@ vgasize=1440x900x32
 vgasize=1280x768x32
 
 [text]
-bootfile=ether0!/sys/src/9k/k10/9k10
 vgasize=none
 debugboot=1
 
 [common]
 bootfile=ether0!/386/9pc
-bootfile=ether0!/amd64/9k10
 fs=10.0.2.1
 auth=10.0.2.1
 sysname=gnot

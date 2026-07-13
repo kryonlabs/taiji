@@ -1,4 +1,5 @@
 #!/bin/rc
 echo -n readme > /dev/label
+cat readme.lola
 cat readme.rio
 exec rc -i

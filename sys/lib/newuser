@@ -29,10 +29,12 @@ case terminal
 	echo -n 'res 3' > '#m/mousectl'
 	prompt=('term% ' '	')
 	fn term%{ $x^* }
+	if(test -e /bin/lola)
+		exec lola
 	exec rio
 case cpu
 	if (test -e /mnt/term/mnt/wsys) {
-		# rio already running
+		# window system already running
 		wsys = /mnt/term^`{cat /mnt/term/env/wsys}
 		bind -a /mnt/term/mnt/wsys /dev
 		echo -n $x^sysname > /dev/label
@@ -49,6 +51,8 @@ case cpu
 		font=/lib/font/bit/pelm/latin1.8.font
 		plumber
 		auth/factotum
+		if(test -e /bin/lola)
+			exec lola
 		exec rio
 	}
 case con

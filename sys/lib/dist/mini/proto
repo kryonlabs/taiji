@@ -98,6 +98,7 @@ $cputype
 			ping
 			traceroute
 		join
+		jot
 		jpg
 		lock
 		look
@@ -142,6 +143,7 @@ $cputype
 		ramfs
 		rc
 		read
+		lola
 		rio
 		rm
 		rx
@@ -350,5 +352,6 @@ usr
 			profile
 			plumbing
 		readme.acme
+		readme.lola
 		readme.rio
 		tmp

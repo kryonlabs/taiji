@@ -179,7 +179,7 @@ switch($service){
 case terminal
 	plumber
 	prompt=('term% ' '	')
-	exec rio -f $font
+	exec lola
 case cpu
 	bind /mnt/term/dev/cons /dev/cons
 	bind /mnt/term/dev/consctl /dev/consctl

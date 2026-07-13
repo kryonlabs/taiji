@@ -13,9 +13,11 @@ case terminal
 	echo -n 'res 3' > '#m/mousectl'
 	prompt=('term% ' '	')
 	fn term%{ $* }
+	if(test -e /bin/lola)
+		exec lola -i riostart
 	exec rio -i riostart
 case cpu
-	if (test -e /mnt/term/mnt/wsys) { # rio already running
+	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev
 		if(test -w /dev/label)
 			echo -n $sysname > /dev/label
@@ -28,6 +30,8 @@ case cpu
 	news
 	if (! test -e /mnt/term/mnt/wsys) {	# cpu call from drawterm
 		font=/lib/font/bit/pelm/latin1.8.font
+		if(test -e /bin/lola)
+			exec lola
 		exec rio
 	}
 case con

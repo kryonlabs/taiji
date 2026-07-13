@@ -1,0 +1,19 @@
+< /$objtype/mkfile
+
+TARG=jot
+OFILES=\
+	main.$O \
+	text.$O \
+	kbd.$O \
+	time.$O
+
+HFILES=inc.h
+
+BIN=/$objtype/bin
+
+UPDATE=\
+	mkfile\
+	$HFILES\
+	${OFILES:%.$O=%.c}\
+
+< /sys/src/cmd/mkone

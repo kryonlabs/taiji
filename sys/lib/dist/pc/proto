@@ -87,6 +87,7 @@
 		ps	555 sys sys /sys/lib/dist/pc/multi/ps
 		rc	555 sys sys
 		read	555 sys sys /sys/lib/dist/pc/multi/read
+		lola	555 sys sys
 		rio	555 sys sys
 		rm	555 sys sys /sys/lib/dist/pc/multi/rm
 		sed	555 sys sys /sys/lib/dist/pc/multi/sed
