@@ -1,9 +1,5 @@
 #include "inc.h"
 
-int bordersz = 4;
-int titlesz = 17;//19;
-int tabsz = 18;
-
 enum {
 	TITLE,
 	LTITLE,
@@ -19,12 +15,12 @@ enum {
 	NumWinColors
 };
 
-Image *wincolors[NumWinColors];
-Image *icons[4];
+static Image *wincolors[NumWinColors];
+static Image *icons[4];
 
-Image *shadecol;
+static Image *shadecol;
 
-void
+static void
 btn(Image *img, Rectangle r, Image *col, Image *icon, int down)
 {
 	USED(down);
@@ -33,7 +29,7 @@ btn(Image *img, Rectangle r, Image *col, Image *icon, int down)
 	draw(img, r, col, icon, ZP);
 }
 
-int
+static int
 btnctl(Image *img, Rectangle r, Image *col, Image *icon)
 {
 	int over, prevover;
@@ -53,7 +49,7 @@ btnctl(Image *img, Rectangle r, Image *col, Image *icon)
 }
 
 void
-wdecor(Window *w)
+simplewdecor(Window *w)
 {
 	if(w->frame == nil)
 		return;
@@ -115,7 +111,7 @@ wdecor(Window *w)
 }
 
 void
-wtitlectl(Window *w)
+simplewtitlectl(Window *w)
 {
 	if(mctl->buttons & 7){
 		wraise(w);
@@ -222,7 +218,7 @@ static char closebtn[] = {
 };
 
 void
-inittheme(void)
+simpleinittheme(void)
 {
 	freeimage(colors[HOLDTEXT]);
 	freeimage(colors[PALEHOLDTEXT]);

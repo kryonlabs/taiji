@@ -350,8 +350,22 @@ void grab(Window *w, int btn);
 void btn3menu(void);
 
 void inittheme(void);
+void settheme(char *name);
 Image *getcolor(char *name, ulong defcol);
 Image *mkicon(char *px, int w, int h);
+
+void flatwdecor(Window *w);
+void flatwtitlectl(Window *w);
+void flatinittheme(void);
+void simplewdecor(Window *w);
+void simplewtitlectl(Window *w);
+void simpleinittheme(void);
+void win3wdecor(Window *w);
+void win3wtitlectl(Window *w);
+void win3inittheme(void);
+void win95wdecor(Window *w);
+void win95wtitlectl(Window *w);
+void win95inittheme(void);
 
 
 extern Channel *opentap;	/* open fromtap or totap */

@@ -1,9 +1,5 @@
 #include "inc.h"
 
-int bordersz = 4;
-int titlesz = 19;
-int tabsz = 23;
-
 enum {
 	ColDefault,
 	ColHilight,
@@ -20,10 +16,10 @@ enum {
 	NumWinColors
 };
 
-Image *wincolors[NumWinColors];
-Image *icons[5];
+static Image *wincolors[NumWinColors];
+static Image *icons[5];
 
-void
+static void
 winbtn(Image *img, Rectangle r, Image *icon, int down)
 {
 	draw(img, r, wincolors[ColDefault], nil, ZP);
@@ -42,7 +38,7 @@ winbtn(Image *img, Rectangle r, Image *icon, int down)
 	draw(img, r, icon, icon, ZP);
 }
 
-void
+static void
 winbtnflat(Image *img, Rectangle r, Image *icon, Image *icondown, int down)
 {
 	if(down){
@@ -57,7 +53,7 @@ winbtnflat(Image *img, Rectangle r, Image *icon, Image *icondown, int down)
 	draw(img, r, icon, icon, ZP);
 }
 
-int
+static int
 winbtnctl(Image *img, Rectangle r, Image *icon)
 {
 	int over, prevover;
@@ -76,7 +72,7 @@ winbtnctl(Image *img, Rectangle r, Image *icon)
 	return ptinrect(mctl->xy, r);
 }
 
-int
+static int
 winbtnctlflat(Image *img, Rectangle r, Image *icon, Image *icondown)
 {
 	int over, prevover;
@@ -98,7 +94,7 @@ winbtnctlflat(Image *img, Rectangle r, Image *icon, Image *icondown)
 
 
 void
-wdecor(Window *w)
+win3wdecor(Window *w)
 {
 	if(w->frame == nil)
 		return;
@@ -183,7 +179,7 @@ wdecor(Window *w)
 }
 
 void
-wtitlectl(Window *w)
+win3wtitlectl(Window *w)
 {
 	if(mctl->buttons & 7){
 		wraise(w);
@@ -315,7 +311,7 @@ static char menubtninv[] = {
 
 
 void
-inittheme(void)
+win3inittheme(void)
 {
 	background = getcolor("background", 0xC0C7C8FF);
 

@@ -1,9 +1,5 @@
 #include "inc.h"
 
-int bordersz = 4;
-int titlesz = 18;
-int tabsz = 18;
-
 enum {
 	TITLE,
 	LTITLE,
@@ -17,11 +13,11 @@ enum {
 	NumWinColors
 };
 
-Image *wincolors[NumWinColors];
-Image *shadecol;
+static Image *wincolors[NumWinColors];
+static Image *shadecol;
 
 void
-wdecor(Window *w)
+flatwdecor(Window *w)
 {
 	if(w->frame == nil)
 		return;
@@ -70,7 +66,7 @@ wdecor(Window *w)
 }
 
 void
-wtitlectl(Window *w)
+flatwtitlectl(Window *w)
 {
 	if(mctl->buttons & 7){
 		wraise(w);
@@ -91,7 +87,7 @@ wtitlectl(Window *w)
 }
 
 void
-inittheme(void)
+flatinittheme(void)
 {
 	wincolors[TITLE] = getcolor("title", DGreygreen);
 	wincolors[LTITLE] = getcolor("ltitle", DPalegreygreen);

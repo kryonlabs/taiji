@@ -12,6 +12,12 @@ lola \- window system
 [
 .B -t
 ]
+[
+.BI "-T " theme
+]
+[
+.BI "-theme " theme
+]
 .SH DESCRIPTION
 .I Lola
 is a window system based on the architecture of
@@ -36,6 +42,21 @@ option starts windows in scrolling mode.
 The
 .B -t
 option enables experimental tabbed windows.
+.PP
+The
+.B -T
+and
+.B -theme
+options select the window decoration theme.
+The available themes are
+.BR flat ,
+.BR simple ,
+.BR win3 ,
+and
+.BR win95 .
+If no theme is specified,
+.B simple
+is used.
 .PP
 .I Lola
 supports the usual

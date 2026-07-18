@@ -29,9 +29,9 @@ case terminal
 	echo -n 'res 3' > '#m/mousectl'
 	prompt=('term% ' '	')
 	fn term%{ $x^* }
-	if(test -e /bin/lola)
-		exec lola
-	exec rio
+	if(grep -s -e -theme /bin/lola)
+		exec lola -theme win95
+	exec lola
 case cpu
 	if (test -e /mnt/term/mnt/wsys) {
 		# window system already running
@@ -51,9 +51,9 @@ case cpu
 		font=/lib/font/bit/pelm/latin1.8.font
 		plumber
 		auth/factotum
-		if(test -e /bin/lola)
-			exec lola
-		exec rio
+		if(grep -s -e -theme /bin/lola)
+			exec lola -theme win95
+		exec lola
 	}
 case con
 	prompt=('cpu% ' '	')

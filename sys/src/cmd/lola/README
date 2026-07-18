@@ -41,11 +41,17 @@ After that had been more or less achieved some new features were implemented:
 - misc
 	- 1-3 chord on desktop opens secondary menu
 
-# Building
+# Themes
 
-The window decoration style is set by linking in the relevant file,
-so edit the `mkfile' to try different styles.
-The options are: flat.c, simple.c, win3.c, win95.c
+The window decoration theme is selected at startup:
+
+	lola -theme win95
+
+The short option is also supported:
+
+	lola -T win95
+
+The options are: flat, simple, win3, win95.
 
 # Color schemes
 

@@ -1,9 +1,5 @@
 #include "inc.h"
 
-int bordersz = 4;
-int titlesz = 19;
-int tabsz = 20;
-
 enum {
 	ColDefault,
 	ColLight1,
@@ -18,10 +14,10 @@ enum {
 	NumWinColors
 };
 
-Image *wincolors[NumWinColors];
-Image *icons[5];
+static Image *wincolors[NumWinColors];
+static Image *icons[5];
 
-void
+static void
 winbtn(Image *img, Rectangle r, Image *icon, int down)
 {
 	if(down){
@@ -42,7 +38,7 @@ winbtn(Image *img, Rectangle r, Image *icon, int down)
 	draw(img, r, icon, icon, ZP);
 }
 
-void
+static void
 winframe(Image *img, Rectangle r)
 {
 	winborder(img, r, wincolors[ColLight1], wincolors[ColDark2]);
@@ -50,7 +46,7 @@ winframe(Image *img, Rectangle r)
 	winborder(img, r, wincolors[ColLight2], wincolors[ColDark1]);
 }
 
-int
+static int
 winbtnctl(Image *img, Rectangle r, Image *icon)
 {
 	int over, prevover;
@@ -70,7 +66,7 @@ winbtnctl(Image *img, Rectangle r, Image *icon)
 }
 
 void
-wdecor(Window *w)
+win95wdecor(Window *w)
 {
 	if(w->frame == nil)
 		return;
@@ -132,7 +128,7 @@ wdecor(Window *w)
 }
 
 void
-wtitlectl(Window *w)
+win95wtitlectl(Window *w)
 {
 	if(mctl->buttons & 7){
 		wraise(w);
@@ -256,7 +252,7 @@ static char appbtn[] = {
 };
 
 void
-inittheme(void)
+win95inittheme(void)
 {
 	background = getcolor("background", 0x008080FF);
 

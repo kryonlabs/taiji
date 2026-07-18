@@ -1019,7 +1019,7 @@ initcmd(void *arg)
 void
 usage(void)
 {
-	fprint(2, "usage: lola [-i initcmd] [-s] [-t]\n");
+	fprint(2, "usage: lola [-i initcmd] [-s] [-t] [-T theme] [-theme theme]\n");
 	exits("usage");
 }
 
@@ -1028,11 +1028,27 @@ threadmain(int argc, char *argv[])
 {
 	char *initstr, *s;
 	char buf[256];
+	int i, j;
 
 	initstr = nil;
+	for(i = 1; i < argc; i++){
+		if(strcmp(argv[i], "-theme") != 0)
+			continue;
+		if(i+1 == argc)
+			usage();
+		settheme(argv[i+1]);
+		for(j = i; j+2 < argc; j++)
+			argv[j] = argv[j+2];
+		argc -= 2;
+		argv[argc] = nil;
+		i--;
+	}
 	ARGBEGIN{
 	case 'i':
 		initstr = EARGF(usage());
+		break;
+	case 'T':
+		settheme(EARGF(usage()));
 		break;
 	case 's':
 		scrolling = TRUE;

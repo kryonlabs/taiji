@@ -13,7 +13,11 @@ OFILES=\
 	data.$O \
 	menuhit.$O \
 	deskmenu.$O \
-	simple.$O
+	theme.$O \
+	flat.$O \
+	simple.$O \
+	win3.$O \
+	win95.$O
 
 HFILES=inc.h
 
@@ -23,9 +27,6 @@ UPDATE=\
 	mkfile\
 	$HFILES\
 	${OFILES:%.$O=%.c}\
-	flat.c\
-	win3.c\
-	win95.c\
 	README\
 
 < /sys/src/cmd/mkone
