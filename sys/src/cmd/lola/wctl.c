@@ -74,6 +74,8 @@ enum
 	R,
 	Scrolling,
 	Noscrolling,
+	Noborderparam,
+	Notitleparam,
 };
 
 static char *params[] = {
@@ -90,6 +92,8 @@ static char *params[] = {
 	[R]				= "-r",
 	[Scrolling]			= "-scroll",
 	[Noscrolling]		= "-noscroll",
+	[Noborderparam]		= "-noborder",
+	[Notitleparam]		= "-notitle",
 	nil
 };
 
@@ -177,6 +181,8 @@ parsewctl(char *s, Rectangle r)
 	cmd.pid = 0;
 	cmd.hidden = FALSE;
 	cmd.scrolling = scrolling;
+	cmd.noborder = FALSE;
+	cmd.notitle = FALSE;
 	cmd.dir = nil;
 	cmd.error = nil;
 	cmd.cmd = word(&s, cmds);
@@ -201,6 +207,12 @@ parsewctl(char *s, Rectangle r)
 			continue;
 		case Noscrolling:
 			cmd.scrolling = FALSE;
+			continue;
+		case Noborderparam:
+			cmd.noborder = TRUE;
+			continue;
+		case Notitleparam:
+			cmd.notitle = TRUE;
 			continue;
 		case R:
 			r.min.x = riostrtol(s, &t);
@@ -430,7 +442,7 @@ writewctl(WinTab *w, char *data)
 		refresh();
 		return nil;
 	case New:
-		w = wtcreate(cmd.r, cmd.hidden, cmd.scrolling);
+		w = wtcreateopts(cmd.r, cmd.hidden, cmd.scrolling, cmd.noborder, cmd.notitle);
 		if(w == nil)
 			return "window creation failed";
 		return wctlnew(w, cmd);

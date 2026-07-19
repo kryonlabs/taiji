@@ -6,6 +6,29 @@ if(! syscall create /tmp/xxx 1 0666 >[2]/dev/null)
 font = /lib/font/bit/pelm/euro.9.font
 upas/fs
 fn cd { builtin cd $* && awd }  # for acme
+if(~ $q9unix 1){
+	bind -a /$cputype/bin/ape /bin
+	if(test -x /bin/git/compat){
+		ramfs -m /n/gitcompat
+		touch /n/gitcompat/git
+		bind /bin/git/compat /n/gitcompat/git
+		path=(/n/gitcompat $path)
+	}
+	fn ll { ls -l $* }
+	fn la { ls -la $* }
+	fn l { ls $* }
+	fn cdup { cd .. }
+	fn cls { echo }
+	fn clear { echo }
+	fn path { echo $path }
+	fn which { for(i in $path) if(test -x $i/$1) echo $i/$1 }
+	fn web { webfs && echo webfs mounted at /mnt/web }
+	fn get { hget $* }
+	if(test -r $home/lib/go.rc)
+		. $home/lib/go.rc
+	if(test -x /bin/q9kbapply)
+		q9kbapply >/dev/null >[2=1]
+}
 switch($service){
 case terminal
 	plumber
@@ -13,9 +36,14 @@ case terminal
 	echo -n 'res 3' > '#m/mousectl'
 	prompt=('term% ' '	')
 	fn term%{ $* }
-	if(grep -s -e -theme /bin/lola)
-		exec lola -theme win95 -i riostart
-	exec lola -i riostart
+	if(~ $q9mode text){
+		if(test -r /cfg/q9/run.rc)
+			. /cfg/q9/run.rc
+		exec rc
+	}
+		if(grep -s -e -theme /bin/lola)
+			exec lola -nopanel -theme win95 -i riostart
+		exec lola -i riostart
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev
@@ -31,7 +59,7 @@ case cpu
 	if (! test -e /mnt/term/mnt/wsys) {	# cpu call from drawterm
 		font=/lib/font/bit/pelm/latin1.8.font
 		if(grep -s -e -theme /bin/lola)
-			exec lola -theme win95
+			exec lola -nopanel -theme win95
 		exec lola
 	}
 case con

@@ -101,6 +101,7 @@ char *rcargv[] = { "rc", "-i", nil };
 char *kbdargv[] = { "rc", "-c", nil, nil };
 
 int errorshouldabort = 0;
+int unixkeys;
 
 void
 derror(Display*, char *errorstr)
@@ -123,6 +124,11 @@ threadmain(int argc, char *argv[])
 	char buf[256];
 	Image *i;
 	Rectangle r;
+
+	s = getenv("q9unix");
+	if(s != nil && strcmp(s, "1") == 0)
+		unixkeys = TRUE;
+	free(s);
 
 	if(strstr(argv[0], ".out") == nil){
 		menu3str[Exit] = nil;

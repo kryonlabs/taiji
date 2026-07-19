@@ -53,7 +53,7 @@ wmaximize(Window *w)
 	w->maximized = 1;
 	w->noborder |= 2;
 	w->origrect = w->frame->r;
-	wresize(w, screen->r);
+	wresize(w, panelworkrect());
 }
 
 void
@@ -204,11 +204,18 @@ static int id = 1;
 Window*
 wcreate(Rectangle r, bool hidden)
 {
+	return wcreateopts(r, hidden, FALSE, FALSE);
+}
+
+Window*
+wcreateopts(Rectangle r, bool hidden, bool noborder, bool notitleopt)
+{
 	Window *w;
 
 	w = emalloc(sizeof(Window));
 	w->hidden = hidden;
-	w->notitle = notitle;	// TODO: argument?
+	w->noborder = noborder;
+	w->notitle = notitle || notitleopt;
 	wcalcrects(w, r);
 	wreinit(w, 1);
 	wlistpushfront(w);
@@ -217,6 +224,7 @@ wcreate(Rectangle r, bool hidden)
 	windows[nwindows++] = w;
 
 	wfocus(w);
+	paneldraw();
 
 	return w;
 }
@@ -282,6 +290,12 @@ wtcreate(Rectangle r, bool hidden, bool scrolling)
 	return tcreate(wcreate(r, hidden), scrolling);
 }
 
+WinTab*
+wtcreateopts(Rectangle r, bool hidden, bool scrolling, bool noborder, bool notitle)
+{
+	return tcreate(wcreateopts(r, hidden, noborder, notitle), scrolling);
+}
+
 /* called from winthread when it exits */
 static void
 wfree(WinTab *w)
@@ -319,6 +333,7 @@ wdestroy(Window *w)
 		}
 	wfreeimages(w);
 	free(w);
+	paneldraw();
 	flushimage(display, 1);
 }
 
@@ -541,7 +556,9 @@ wpointto(Point pt)
 void
 wsetcursor(WinTab *w)
 {
-	if(w->w == cursorwin)
+	if(w->w == cursorwin && unixkeys)
+		setcursornormal(&whitearrow);
+	else if(w->w == cursorwin)
 		setcursornormal(w->holdmode ? &whitearrow : w->cursorp);
 }
 
@@ -551,6 +568,7 @@ wsetlabel(WinTab *w, char *label)
 	free(w->label);
 	w->label = estrdup(label);
 	wdecor(w->w);
+	paneldraw();
 }
 
 void
@@ -620,6 +638,7 @@ worder(void)
 	for(w = bottomwin; w; w = w->higher)
 		if(!w->hidden)
 			topwindow(w->frame);
+	paneldraw();
 }
 
 void
@@ -629,6 +648,8 @@ wresize(Window *w, Rectangle r)
 	wreinit(w, 1);
 	if(w != topwin && !w->hidden)
 		worder();
+	else
+		paneldraw();
 	for(WinTab *t = w->tab; t; t = t->next)
 		wsendmsg(t, Resized);
 }
@@ -645,6 +666,7 @@ wraise(Window *w)
 	wlistremove(w);
 	wlistpushfront(w);
 	topwindow(w->frame);
+	paneldraw();
 	flushimage(display, 1);
 }
 
@@ -655,6 +677,7 @@ wlower(Window *w)
 	wlistpushback(w);
 	bottomwindow(w->frame);
 	bottomwindow(fakebg);
+	paneldraw();
 	flushimage(display, 1);
 }
 
@@ -694,6 +717,7 @@ wfocus(Window *w)
 	}
 	wfocuschanged(prev);
 	wfocuschanged(focused);
+	paneldraw();
 }
 
 void
@@ -716,6 +740,7 @@ whide(Window *w)
 	w->tab->wctlready = TRUE;
 	wsendmsg(w->tab, Wakeup);
 	wrelease(w->tab);
+	paneldraw();
 	return 1;
 }
 
@@ -988,6 +1013,20 @@ wkeyctl(WinTab *w, Rune r)
 
 	if(x->rawmode && (x->q0 == x->nr || w->mouseopen))
 		xaddraw(x, &r, 1);
+	else if(unixkeys && r == CTRL('L')){
+		xclear(x);
+		x->qh = x->q0 = x->q1 = 0;
+		xscrdraw(x);
+	}
+	else if(unixkeys && r == CTRL('C')){
+		x->qh = x->nr;
+		xshow(x, x->qh);
+		if(w->notefd < 0)
+			return;
+		notefd = emalloc(sizeof(int));
+		*notefd = dup(w->notefd, -1);
+		proccreate(interruptproc, notefd, 4096);
+	}
 	else if(r == Kdel){
 		x->qh = x->nr;
 		xshow(x, x->qh);

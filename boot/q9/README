@@ -1,0 +1,51 @@
+q9
+==
+
+`./q9` starts this tree under QEMU and boots Glenda's normal graphical
+Plan 9 profile.
+
+Examples:
+
+	./q9
+	./q9 --text
+	./q9 --smp 2
+	./q9 acme
+	./q9 lola -theme win95
+	./q9 run 'rio'
+	./q9 run 'lola -theme win95'
+	./q9 run 'cd /sys/src/cmd/lola && mk install'
+	./q9 --raw
+
+Use `./q9 --text` when you want the q9 shell-first profile.  That profile
+leaves you at `term%` instead of starting the window system at boot.
+
+From the Plan 9 prompt in `--text` mode, run `rio`, `lola`, `acme`, or
+any other command normally.  The QEMU display is already available, so
+graphical programs can draw when you launch them from the shell.
+
+The q9 PXE profile also sets `nousbboot=1` and `q9fast=1`, which skip
+boot and terminal startup work that is slow and not useful for this VM,
+such as USB probing, disk probing, DNS, timesync, and APM.
+
+The q9 profiles set `q9unix=1`, which enables small shell conveniences in
+Glenda's profile: `ll`, `la`, `l`, `cdup`, `clear`, `cls`, `path`, and
+`which`.  It also appends APE tools to `/bin`, exposes `git/compat` as
+`git`, and adds helpers for web downloads.
+
+Run `q9setup` inside Plan 9 to see the bundled development tools.  APE,
+git, SSH, hget/webfs, archive tools, Ghostscript/page, VNC, and common
+text tools are already present in this tree.
+
+Run `q9deps` inside Plan 9 for optional internet-backed installs.  For
+example, `q9deps go-bootstrap` downloads the official plan9/386 Go
+bootstrap archive, unpacks it under `/tmp`, binds its `bin` directory into
+`/bin`, and writes `$home/lib/go.rc` so future sessions can find it.  Use
+`q9deps clone url [dir]` to clone external git repositories with the
+bundled Plan 9 git wrapper.
+
+Use `--smp n` or `Q9_SMP=n` to expose multiple CPUs to QEMU.  q9 keeps
+Plan 9 MP disabled with `*nomp=1` for now because this PC kernel can panic
+under QEMU during LAPIC clock calibration.  This keeps normal boot stable.
+
+Use `--raw` when you want to see the BIOS/kernel boot log or when running
+without a real terminal.

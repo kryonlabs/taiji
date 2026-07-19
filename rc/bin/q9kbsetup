@@ -1,0 +1,35 @@
+#!/bin/rc
+
+rfork e
+
+mapfile=$home/lib/kbmap
+if(~ $1 -reset)
+	rm -f $mapfile
+
+if(test -r $mapfile){
+	q9kbapply
+	exit ''
+}
+
+if(! test -d $home/lib)
+	mkdir $home/lib
+
+if(test -w /dev/label)
+	echo -n 'keyboard layout' >/dev/label
+
+kbmap -s $mapfile \
+	/sys/lib/kbmap/us \
+	/sys/lib/kbmap/uk \
+	/sys/lib/kbmap/es \
+	/sys/lib/kbmap/de \
+	/sys/lib/kbmap/it \
+	/sys/lib/kbmap/fi \
+	/sys/lib/kbmap/no \
+	/sys/lib/kbmap/jp \
+	/sys/lib/kbmap/azerty \
+	/sys/lib/kbmap/dvorak \
+	/sys/lib/kbmap/svorak \
+	/sys/lib/kbmap/ascii
+
+if(test -w /dev/wctl)
+	echo delete >/dev/wctl

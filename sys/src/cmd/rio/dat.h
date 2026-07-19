@@ -337,6 +337,7 @@ int		wctlfd;
 char		srvpipe[];
 char		srvwctl[];
 int		errorshouldabort;
+int		unixkeys;
 int		menuing;		/* menu action is pending; waiting for window to be indicated */
 int		snarfversion;	/* updated each time it is written */
 int		messagesize;		/* negotiated in 9P version setup */

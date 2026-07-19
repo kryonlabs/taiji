@@ -115,6 +115,7 @@ void initdata(void);
 extern int tabwidth;
 extern bool scrolling;
 extern bool notitle;
+extern bool unixkeys;
 extern int ndeskx;
 extern int ndesky;
 
@@ -273,6 +274,7 @@ extern Window *focused, *cursorwin;
 extern Point screenoff;
 
 Window *wcreate(Rectangle r, bool hidden);
+Window *wcreateopts(Rectangle r, bool hidden, bool noborder, bool notitle);
 int wcolsel(Window *w);
 void wtitlectl(Window *w);
 void wdecor(Window *w);
@@ -310,6 +312,7 @@ void tmoveleft(WinTab *t);
 void tmoveright(WinTab *t);
 
 WinTab *wtcreate(Rectangle r, bool hidden, bool scrolling);
+WinTab *wtcreateopts(Rectangle r, bool hidden, bool scrolling, bool noborder, bool notitle);
 
 void screenoffset(int offx, int offy);
 
@@ -323,6 +326,8 @@ struct Wctlcmd
 	int id;
 	bool hidden;
 	bool scrolling;
+	bool noborder;
+	bool notitle;
 	char *dir;
 	char *error;
 };
@@ -348,11 +353,22 @@ void drainmouse(Mousectl *mc, WinTab *w);
 Window *pick(void);
 void grab(Window *w, int btn);
 void btn3menu(void);
+WinTab *new(Rectangle r);
+void killprocs(void);
+
+void panelinit(void);
+void paneldraw(void);
+void panelreset(void);
+int panelmouse(Mousectl *mc);
+int panelenabled(void);
+void panelsetedge(char *s);
+Rectangle panelworkrect(void);
 
 void inittheme(void);
 void settheme(char *name);
 Image *getcolor(char *name, ulong defcol);
 Image *mkicon(char *px, int w, int h);
+Image *mkiconmask(char *px, int w, int h);
 
 void flatwdecor(Window *w);
 void flatwtitlectl(Window *w);

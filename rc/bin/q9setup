@@ -1,0 +1,49 @@
+#!/bin/rc
+
+rfork e
+
+fn have {
+	found=()
+	if(~ $1 */*){
+		if(test -x /bin/$1)
+			found=yes
+	}
+	if not {
+		for(d in $path)
+			if(test -x $d/$1)
+				found=yes
+	}
+	if(~ $#found 0)
+		echo 'missing	'$1
+	if not
+		echo 'ok	'$1
+}
+
+echo 'q9 userspace'
+echo '============'
+echo
+
+echo 'core development'
+for(i in ape/sh ape/make ape/cc ape/patch ape/sed ape/diff ape/tar git)
+	have $i
+echo
+
+echo 'network'
+for(i in hget webfs webfsget ssh1 ssh2 netssh sshnet)
+	have $i
+echo
+
+echo 'archives and documents'
+for(i in gzip gunzip bzip2 bunzip2 lzip zip unzip tar page gs png jpg)
+	have $i
+echo
+
+echo 'remote/display'
+for(i in vncs vncv vt stats faces)
+	have $i
+echo
+
+if(test -x /bin/go)
+	echo 'ok	go'
+if not
+	echo 'missing	go	(run q9deps go-bootstrap for an internet-backed bootstrap install)'

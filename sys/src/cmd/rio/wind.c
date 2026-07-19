@@ -634,6 +634,8 @@ wkeyctl(Window *w, Rune r)
 		waddraw(w, &r, 1);
 		return;
 	}
+	if(unixkeys && r == 0x03)
+		r = 0x7F;
 	if(r==0x1B || (w->holding && r==0x7F)){	/* toggle hold */
 		if(w->holding)
 			--w->holding;

@@ -3,6 +3,7 @@
 int tabwidth;
 bool scrolling;
 bool notitle;
+bool unixkeys;
 int ndeskx = 3;
 int ndesky = 3;
 
@@ -120,6 +121,8 @@ Cursor *cursor;
 void
 setmousecursor(Cursor *c)
 {
+	if(c == nil)
+		c = &whitearrow;
 	if(cursor == c)
 		return;
 	cursor = c;
@@ -435,12 +438,15 @@ badrect(Rectangle r)
 int
 goodrect(Rectangle r)
 {
+	Rectangle wr;
+
+	wr = panelworkrect();
 	if(badrect(r) || !eqrect(canonrect(r), r))
 		return 0;
 	/* reasonable sizes only please */
-	if(Dx(r) > BIG*Dx(screen->r))
+	if(Dx(r) > BIG*Dx(wr))
 		return 0;
-	if(Dy(r) > BIG*Dy(screen->r))
+	if(Dy(r) > BIG*Dy(wr))
 		return 0;
 	/*
 	 * the height has to be big enough to fit one line of text.
@@ -451,10 +457,10 @@ goodrect(Rectangle r)
 		return 0;
 //TODO(vdesk) this changes
 	/* window must be on screen */
-	if(!rectXrect(screen->r, r))
+	if(!rectXrect(wr, r))
 		return 0;
 	/* must have some screen and border visible so we can move it out of the way */
-	if(rectinrect(screen->r, insetrect(r, bordersz)))
+	if(rectinrect(wr, insetrect(r, bordersz)))
 		return 0;
 	return 1;
 }
@@ -465,11 +471,13 @@ newrect(void)
 {
 	static int i = 0;
 	int minx, miny, dx, dy;
+	Rectangle wr;
 
-	dx = MIN(600, Dx(screen->r) - 2*bordersz);
-	dy = MIN(400, Dy(screen->r) - 2*bordersz);
-	minx = 32 + 16*i;
-	miny = 32 + 16*i;
+	wr = panelworkrect();
+	dx = MIN(600, Dx(wr) - 2*bordersz);
+	dy = MIN(400, Dy(wr) - 2*bordersz);
+	minx = wr.min.x + 32 + 16*i;
+	miny = wr.min.y + 32 + 16*i;
 	i++;
 	i %= 10;
 
@@ -750,6 +758,8 @@ mthread(void*)
 			sendp(wc, pick());
 			break;
 		case Amouse:
+			if(panelmouse(mctl))
+				break;
 			w = wpointto(mctl->xy);
 			cursorwin = w;
 again:
@@ -839,6 +849,7 @@ resthread(void*)
 			sysfatal("resize failed: %r");
 		nr = screen->clipr;
 
+		panelreset();
 		freeimage(fakebg);
 		freescreen(wscreen);
 		wscreen = allocscreen(screen, background, 0);
@@ -855,6 +866,7 @@ resthread(void*)
 				wresize(w, rectaddpt(w->frame->r, delta));
 		}
 
+		paneldraw();
 		flushimage(display, 1);
 	}
 }
@@ -873,6 +885,7 @@ refresh(void)
 		}else
 			wresize(w, w->frame->r);
 	}
+	paneldraw();
 }
 
 /*
@@ -1019,7 +1032,7 @@ initcmd(void *arg)
 void
 usage(void)
 {
-	fprint(2, "usage: lola [-i initcmd] [-s] [-t] [-T theme] [-theme theme]\n");
+	fprint(2, "usage: lola [-i initcmd] [-s] [-t] [-P edge] [-nopanel] [-T theme] [-theme theme]\n");
 	exits("usage");
 }
 
@@ -1032,11 +1045,25 @@ threadmain(int argc, char *argv[])
 
 	initstr = nil;
 	for(i = 1; i < argc; i++){
-		if(strcmp(argv[i], "-theme") != 0)
+		if(strcmp(argv[i], "-theme") != 0 &&
+		   strcmp(argv[i], "-panel") != 0 &&
+		   strcmp(argv[i], "-nopanel") != 0)
 			continue;
+		if(strcmp(argv[i], "-nopanel") == 0){
+			panelsetedge("off");
+			for(j = i; j+1 < argc; j++)
+				argv[j] = argv[j+1];
+			argc--;
+			argv[argc] = nil;
+			i--;
+			continue;
+		}
 		if(i+1 == argc)
 			usage();
-		settheme(argv[i+1]);
+		if(strcmp(argv[i], "-theme") == 0)
+			settheme(argv[i+1]);
+		else
+			panelsetedge(argv[i+1]);
 		for(j = i; j+2 < argc; j++)
 			argv[j] = argv[j+2];
 		argc -= 2;
@@ -1049,6 +1076,9 @@ threadmain(int argc, char *argv[])
 		break;
 	case 'T':
 		settheme(EARGF(usage()));
+		break;
+	case 'P':
+		panelsetedge(EARGF(usage()));
 		break;
 	case 's':
 		scrolling = TRUE;
@@ -1069,6 +1099,10 @@ threadmain(int argc, char *argv[])
 		tabwidth = strtol(s, nil, 0);
 	if(tabwidth == 0)
 		tabwidth = 4;
+	free(s);
+	s = getenv("q9unix");
+	if(s != nil && strcmp(s, "1") == 0)
+		unixkeys = TRUE;
 	free(s);
 
 	if(initdraw(nil, nil, "lola") < 0)
@@ -1096,6 +1130,7 @@ threadmain(int argc, char *argv[])
 	wscreen = allocscreen(screen, background, 0);
 	fakebg = allocwindow(wscreen, screen->r, Refbackup, DNofill);
 	draw(fakebg, fakebg->r, background, nil, ZP);
+	panelinit();
 
 	timerinit();
 
@@ -1104,6 +1139,7 @@ threadmain(int argc, char *argv[])
 	threadcreate(resthread, nil, mainstacksize);
 	threadcreate(keyboardtap, nil, mainstacksize);
 
+	paneldraw();
 	flushimage(display, 1);
 
 	startfs();

@@ -211,6 +211,20 @@ mkicon(char *px, int w, int h)
 	return img;
 }
 
+Image*
+mkiconmask(char *px, int w, int h)
+{
+	int i, j;
+	Image *img;
+
+	img = allocimage(display, Rect(0,0,w,h), GREY8, 1, DBlack);
+	for(i = 0; i < h; i++)
+		for(j = 0; j < w; j++)
+			if(px[i*w + j])
+				draw(img, Rect(j,i,j+1,i+1), display->white, nil, ZP);
+	return img;
+}
+
 void
 initdata(void)
 {

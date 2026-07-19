@@ -3,5 +3,17 @@
 *.a[68]
 *.o
 usr/glenda/tmp
+usr/glenda/acme.dump
+usr/glenda/lib/go.rc
+usr/glenda/lib/kbmap
 sys/log
 sys/src/cmd/unix/u9fs/u9fs
+boot/q9/build.log
+boot/q9/monitor
+boot/q9/qemu.log
+boot/q9/qemu.pid
+boot/q9/socat.log
+boot/q9/serial.log
+boot/q9/serial.sock
+cfg/q9/run.rc
+cfg/q9/run.rc.*

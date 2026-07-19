@@ -13,6 +13,7 @@ OFILES=\
 	data.$O \
 	menuhit.$O \
 	deskmenu.$O \
+	panel.$O \
 	theme.$O \
 	flat.$O \
 	simple.$O \

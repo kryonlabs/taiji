@@ -22,6 +22,7 @@ enum {
 };
 
 char *dir = "/sys/lib/kbmap";
+char *savefile;
 
 void*
 erealloc(void *v, ulong n)
@@ -160,7 +161,7 @@ writemap(char *file)
 void
 click(Mouse m)
 {
-	int i, j;
+	int i, j, fd;
 	char buf[128];
 
 	if(m.buttons == 0 || (m.buttons & ~4))
@@ -201,12 +202,22 @@ click(Mouse m)
 	map[i].current = 1;
 
 	redraw(screen);
+
+	if(savefile != nil){
+		if((fd = create(savefile, OWRITE, 0666)) < 0)
+			fprint(2, "cannot save %s: %r\n", savefile);
+		else{
+			fprint(fd, "%s\n", map[i].name);
+			close(fd);
+			exits(nil);
+		}
+	}
 }
 
 void
 usage(void)
 {
-	fprint(2, "usage: kbmap [file...]\n");
+	fprint(2, "usage: kbmap [-s savefile] [file...]\n");
 	exits("usage");
 }
 
@@ -216,8 +227,16 @@ main(int argc, char **argv)
 	Event e;
 	char *c;
 
-	if(argc > 1) {
-		argv++; argc--;
+	argv++; argc--;
+	while(argc > 0 && strcmp(argv[0], "-s") == 0){
+		if(argc < 2)
+			usage();
+		savefile = argv[1];
+		argv += 2;
+		argc -= 2;
+	}
+
+	if(argc > 0) {
 		map = emalloc((argc)*sizeof(KbMap));
 		while(argc--) {
 			map[argc].file = estrdup(argv[argc]);

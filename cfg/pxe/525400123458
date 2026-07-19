@@ -1,0 +1,17 @@
+bootfile=ether0!/386/9pc
+fs=10.0.2.1
+auth=10.0.2.1
+sysname=q9
+*nobiosload=1
+partition=new
+factotumopts=-n
+user=glenda
+q9unix=1
+q9fast=1
+nousbboot=1
+console=0
+mouseport=ps2intellimouse
+monitor=vesa
+vgasize=1024x768x32
+*nomp=1
+nobootprompt=tcp

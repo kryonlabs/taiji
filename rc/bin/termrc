@@ -10,13 +10,16 @@ for(i in f t m v L P u U '$' Σ κ)
 	/bin/bind -a '#'^$i /dev >/dev/null >[2=1]
 
 # set up any partitions
-diskparts
+if(! ~ $q9fast 1)
+	diskparts
 
 # start up local swapping
-disk=`{ls /dev/sd*/swap >[2]/dev/null}
-if (! ~ $#disk 0)
-	swap $disk(1) >/dev/null >[2=1]
-rm /env/disk
+if(! ~ $q9fast 1){
+	disk=`{ls /dev/sd*/swap >[2]/dev/null}
+	if (! ~ $#disk 0)
+		swap $disk(1) >/dev/null >[2=1]
+	rm /env/disk
+}
 
 # we do this before we have a name.  we may need to do network
 # setup so that we can get a name.
@@ -48,12 +51,12 @@ if(! test -e /net/ipifc/0/ctl)
 # Otherwise, see /cfg/$sysname/termrc (/cfg/example/termrc is an example).
 
 # start dns if we have an internet
-if(test -e /net/ipifc/0/ctl && ! test -e /srv/dns)
+if(! ~ $q9fast 1 && test -e /net/ipifc/0/ctl && ! test -e /srv/dns)
 	ndb/dns -r
 
 if(! ~ $terminal *vx32*){
 	# start timesync if it isn't running and we weren't told not to
-	if(! ps|grep -s timesync)
+	if(! ~ $q9fast 1 && ! ps|grep -s timesync)
 		if(! ~ $TIMESYNCARGS '')
 			aux/timesync $TIMESYNCARGS
 
@@ -62,7 +65,7 @@ if(! ~ $terminal *vx32*){
 		ip/ipconfig loopback /dev/null 127.1
 
 	# set things up for vmware
-	if(! ~ `{cat /dev/user} none)
+	if(! ~ $q9fast 1 && ! ~ `{cat /dev/user} none)
 		if(test -e /bin/aux/vmware)
 			aux/vmware
 }
@@ -102,8 +105,9 @@ if(test -f /dev/mousectl){
 	}
 }
 
-usbstart
-if (test -f /dev/apm)
+if(! ~ $q9fast 1)
+	usbstart
+if (! ~ $q9fast 1 && test -f /dev/apm)
 	aux/apm
 
 dontkill '^(ipconfig|factotum|mntgen|fossil|cs|dns|listen|reboot)$'

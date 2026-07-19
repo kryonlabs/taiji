@@ -1,0 +1,99 @@
+#!/bin/rc
+
+rfork e
+
+fn usage {
+	echo 'usage: q9deps list' >[1=2]
+	echo '       q9deps clone url [dir]' >[1=2]
+	echo '       q9deps go-bootstrap' >[1=2]
+	exit usage
+}
+
+fn need {
+	found=()
+	if(~ $1 */*){
+		if(test -x /bin/$1)
+			found=yes
+	}
+	if not {
+		for(d in $path)
+			if(test -x $d/$1)
+				found=yes
+	}
+	if(~ $#found 0){
+		echo 'q9deps: missing /bin/'$1 >[1=2]
+		exit missing
+	}
+}
+
+fn netinit {
+	if(! test -e /srv/dns){
+		if(! test -e /net/ipifc/0/ctl)
+			ip/ipconfig
+		ndb/dns -r
+	}
+}
+
+fn list {
+	echo 'available actions:'
+	echo '	clone url [dir]		clone an external git repository'
+	echo '	go-bootstrap		fetch plan9/386 Go bootstrap archive'
+}
+
+fn clone {
+	if(~ $#* 0)
+		usage
+	netinit
+	need git
+	git clone $*
+}
+
+fn go-bootstrap {
+	netinit
+	need hget
+	need gzip
+	need tar
+	dir=/tmp/gobootstrap-plan9-386
+	archive=/tmp/gobootstrap-plan9-386.tar.gz
+	if(! test -d /tmp)
+		mkdir /tmp
+	if(! test -s $archive){
+		echo 'fetching Go plan9/386 bootstrap archive...'
+		hget -o $archive https://storage.googleapis.com/go-builder-data/gobootstrap-plan9-386.tar.gz || exit fetch
+	}
+	if(! test -x $dir/bin/go){
+		rm -rf $dir
+		mkdir $dir
+		cd $dir || exit cd
+		tar xzf $archive || exit unpack
+	}
+	bind -a $dir/bin /bin
+	GOROOT=$dir
+	path=($dir/bin $path)
+	if(! test -d $home/lib)
+		mkdir $home/lib
+	>$home/lib/go.rc {
+		echo 'GOROOT='$dir
+		echo 'path=('$dir'/bin $path)'
+		echo 'bind -a '$dir'/bin /bin'
+	}
+	echo 'Go bootstrap installed at '$dir
+	echo 'This is a bootstrap toolchain; use it to build a full Go tree if needed.'
+}
+
+if(~ $#* 0)
+	usage
+
+cmd=$1
+shift
+
+switch($cmd){
+case list
+	list
+case clone
+	clone $*
+case go-bootstrap
+	go-bootstrap
+case *
+	usage
+}

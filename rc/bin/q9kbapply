@@ -1,0 +1,31 @@
+#!/bin/rc
+
+rfork e
+
+mapfile=$home/lib/kbmap
+if(! test -r $mapfile)
+	exit ''
+
+map=`{sed 1q $mapfile}
+if(~ $#map 0 || ~ $map '')
+	exit ''
+
+switch($map){
+case *[!a-zA-Z0-9_-]* */*
+	echo 'q9kbapply: bad keyboard map name: '^$map >[1=2]
+	exit badmap
+}
+
+if(! test -e /dev/kbmap)
+	bind -a '#κ' /dev >/dev/null >[2=1]
+if(! test -w /dev/kbmap){
+	echo 'q9kbapply: /dev/kbmap is not writable' >[1=2]
+	exit kbmap
+}
+if(! test -r /sys/lib/kbmap/$map){
+	echo 'q9kbapply: unknown keyboard map: '^$map >[1=2]
+	exit missing
+}
+
+cat /sys/lib/kbmap/ascii >/dev/kbmap
+cat /sys/lib/kbmap/$map >/dev/kbmap

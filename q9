@@ -1,0 +1,269 @@
+#!/bin/sh
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$root"
+
+state=boot/q9
+rundir=cfg/q9
+runrc=$rundir/run.rc
+seriallog=$state/serial.log
+serialsock=$root/$state/serial.sock
+buildlog=$state/build.log
+qemulog=$state/qemu.log
+socatlog=$state/socat.log
+
+qemu=${QEMU:-qemu-system-x86_64}
+image=${Q9_IMAGE:-boot/pxeboot.raw}
+textmac=${Q9_MAC:-52:54:00:12:34:57}
+guimac=${Q9_GUI_MAC:-52:54:00:12:34:58}
+mac=$guimac
+mem=${Q9_MEM:-1G}
+smp=${Q9_SMP:-1}
+boottimeout=${Q9_BOOT_TIMEOUT:-120}
+profile=true
+
+usage()
+{
+	status=${1:-1}
+	cat >&2 <<EOF
+usage: ./q9 [--text] [--mini] [--raw] [--smp n] [console|shell|gui]
+       ./q9 [--text] [--mini] [--raw] [--smp n] run command
+       ./q9 [--mini] [--raw] [--smp n] acme|rio|lola [args...]
+
+Default mode boots Glenda's normal graphical Plan 9 profile.
+
+Use --text or shell to boot a clean rc console with a QEMU display available.
+Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
+Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
+EOF
+	exit "$status"
+}
+
+mkdir -p "$state" "$rundir"
+
+raw=false
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--gui|-g)
+		profile=true
+		mac=$guimac
+		shift
+		;;
+	--text|-t)
+		profile=false
+		mac=$textmac
+		shift
+		;;
+	--mini)
+		image=boot/mini.raw
+		shift
+		;;
+	--raw)
+		raw=true
+		shift
+		;;
+	--smp)
+		[ $# -ge 2 ] || usage
+		case "$2" in
+		*[!0-9]*|'')
+			echo "q9: --smp needs a positive integer" >&2
+			exit 1
+			;;
+		esac
+		if [ "$2" -lt 1 ]; then
+			echo "q9: --smp needs a positive integer" >&2
+			exit 1
+		fi
+		smp=$2
+		shift 2
+		;;
+	--help|-h)
+		usage 0
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+mode=console
+if [ $# -gt 0 ]; then
+	mode=$1
+	shift
+fi
+
+case "$mode" in
+gui)
+	mode=console
+	profile=true
+	mac=$guimac
+	;;
+shell|text|sh)
+	mode=console
+	profile=false
+	mac=$textmac
+	;;
+acme|rio|lola)
+	set -- "$mode" "$@"
+	mode=run
+	profile=false
+	mac=$textmac
+	;;
+esac
+
+if [ "$mode" = run ] && [ "$profile" = true ]; then
+	profile=false
+	mac=$textmac
+fi
+if [ "$mode" = run ] && [ "$raw" != true ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
+	raw=true
+fi
+
+build_u9fs()
+{
+	u9fsbin=sys/src/cmd/unix/u9fs/u9fs
+	if [ "${Q9_REBUILD:-0}" != 1 ] && [ -x "$u9fsbin" ]; then
+		if make -q -C sys/src/cmd/unix/u9fs >"$buildlog" 2>&1; then
+			return
+		fi
+	fi
+	if ! make -C sys/src/cmd/unix/u9fs >"$buildlog" 2>&1; then
+		cat "$buildlog" >&2
+		exit 1
+	fi
+}
+
+write_runrc()
+{
+	cmd=$1
+	tmp=$runrc.$$
+	{
+		printf '#!/bin/rc\n'
+		printf 'echo q9: running /cfg/q9/run.rc\n'
+		printf '%s\n' "$cmd"
+	} >"$tmp"
+	mv "$tmp" "$runrc"
+}
+
+clear_runrc()
+{
+	rm -f "$runrc" "$runrc".*
+}
+
+cleanup_runtime()
+{
+	rm -f "$serialsock"
+}
+
+wait_for_socket()
+{
+	i=0
+	while [ "$i" -lt 10 ]; do
+		if [ -S "$serialsock" ]; then
+			return 0
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo "q9: timed out waiting for serial socket: $serialsock" >&2
+	return 1
+}
+
+qemu_common()
+{
+	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
+	tftp="tftp=$root"
+	"$qemu" -m "$mem" -smp "$smp" \
+		-drive file="$root/$image",format=raw -snapshot \
+		-device "virtio-net-pci,netdev=net0,mac=$mac" \
+		-netdev "user,id=net0,$u9fs,$tftp" "$@"
+}
+
+run_foreground()
+{
+	build_u9fs
+	qemu_common -serial stdio
+}
+
+wait_for_prompt()
+{
+	if [ "$profile" = true ]; then
+		return 0
+	fi
+	i=0
+	while [ "$i" -lt "$boottimeout" ]; do
+		if [ -f "$seriallog" ] && grep -q 'term% ' "$seriallog"; then
+			return 0
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo "q9: timed out waiting for Plan 9 prompt; boot log follows" >&2
+	tail -80 "$seriallog" >&2 || true
+	return 1
+}
+
+run_clean()
+{
+	command -v socat >/dev/null 2>&1 || {
+		echo 'q9: socat is required for the clean console; use --raw for direct QEMU stdio' >&2
+		exit 1
+	}
+	if [ ! -t 0 ] || [ ! -t 1 ]; then
+		echo 'q9: clean console needs a terminal; use --raw for non-interactive output' >&2
+		exit 1
+	fi
+	build_u9fs
+	rm -f "$seriallog" "$serialsock"
+	qemu_common \
+		-chardev "socket,id=serial0,path=$serialsock,server=on,wait=on" \
+		-serial chardev:serial0 \
+		-monitor none >"$qemulog" 2>&1 &
+	qemupid=$!
+	wait_for_socket
+	: >"$seriallog"
+	socat -u "UNIX-CONNECT:$serialsock" "OPEN:$seriallog,creat,append" 2>"$socatlog" &
+	logpid=$!
+	trap 'kill -TERM "${logpid:-}" "$qemupid" 2>/dev/null || true; wait "${logpid:-}" 2>/dev/null || true; wait "$qemupid" 2>/dev/null || true; cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+	wait_for_prompt
+	kill -TERM "$logpid" 2>/dev/null || true
+	wait "$logpid" 2>/dev/null || true
+	wait_for_socket
+	if [ "$mode" = run ]; then
+		sed -n '/q9: running \/cfg\/q9\/run.rc/,$p' "$seriallog" | sed '$s/term% $//'
+	fi
+	if [ "$profile" != true ]; then
+		printf 'term%% '
+	fi
+	socat -,rawer,echo=0 "UNIX-CONNECT:$serialsock" 2>>"$socatlog"
+}
+
+case "$mode" in
+console|shell)
+	clear_runrc
+	if [ "$raw" = true ]; then
+		run_foreground
+	else
+		run_clean
+	fi
+	;;
+run)
+	if [ "$profile" = true ]; then
+		echo 'q9: --gui boots the normal profile; it cannot be combined with run' >&2
+		usage 1
+	fi
+	[ $# -gt 0 ] || usage
+	write_runrc "$*"
+	if [ "$raw" = true ]; then
+		trap clear_runrc EXIT HUP INT TERM
+		run_foreground
+	else
+		run_clean
+	fi
+	;;
+	*)
+		usage 1
+	;;
+esac
