@@ -249,7 +249,7 @@ startmenu(Mouse *m)
 		return;
 	fprint(fd, "new -r %d %d %d %d -noborder -notitle lpanel -menu",
 		screen->r.min.x, screen->r.max.y,
-		screen->r.min.x+Menuw, screen->r.max.y+6*Menuh+6);
+		screen->r.min.x+Menuw, screen->r.max.y+4*Menuh+6);
 	close(fd);
 	while(m->buttons)
 		if(eread(Emouse, &e) == Emouse)
@@ -260,12 +260,10 @@ void
 menumode(void)
 {
 	static char *items[] = {
-		"New rc",
+		"Terminal",
 		"Acme",
 		"Stats",
 		"Kbmap",
-		"Page",
-		"Exit panel",
 		nil,
 	};
 	Event e;
@@ -330,11 +328,6 @@ menumode(void)
 	case 3:
 		run("q9kbsetup -reset");
 		break;
-	case 4:
-		run("page");
-		break;
-	case 5:
-		exits(nil);
 	}
 	exits(nil);
 }
