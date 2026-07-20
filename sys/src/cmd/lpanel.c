@@ -15,10 +15,22 @@ enum {
 };
 
 typedef struct Task Task;
+typedef struct StartItem StartItem;
 struct Task {
 	int id;
 	Rectangle r;
 	char label[64];
+};
+struct StartItem {
+	char *label;
+	char *cmd;
+};
+
+StartItem startitems[] = {
+	{ "Terminal", "rc -i" },
+	{ "Acme", "acme" },
+	{ "Stats", "stats -lmisce" },
+	{ "Kbmap", "q9kbsetup -reset" },
 };
 
 Image *face;
@@ -242,14 +254,15 @@ void
 startmenu(Mouse *m)
 {
 	Event e;
-	int fd;
+	int fd, n;
 
 	fd = open("/dev/wctl", OWRITE);
 	if(fd < 0)
 		return;
+	n = nelem(startitems);
 	fprint(fd, "new -r %d %d %d %d -noborder -notitle lpanel -menu",
 		screen->r.min.x, screen->r.max.y,
-		screen->r.min.x+Menuw, screen->r.max.y+4*Menuh+6);
+		screen->r.min.x+Menuw, screen->r.max.y+n*Menuh+6);
 	close(fd);
 	while(m->buttons)
 		if(eread(Emouse, &e) == Emouse)
@@ -259,25 +272,17 @@ startmenu(Mouse *m)
 void
 menumode(void)
 {
-	static char *items[] = {
-		"Terminal",
-		"Acme",
-		"Stats",
-		"Kbmap",
-		nil,
-	};
 	Event e;
 	Rectangle r;
 	int hover, i, lasthover, n, sel;
 
-	for(n = 0; items[n] != nil; n++)
-		;
+	n = nelem(startitems);
 	draw(screen, screen->r, face, nil, ZP);
 	bevel(screen, screen->r, 0);
 	for(i = 0; i < n; i++){
 		r = Rect(screen->r.min.x+3, screen->r.min.y+3+i*Menuh,
 			screen->r.max.x-3, screen->r.min.y+3+(i+1)*Menuh);
-		drawitem(r, items[i], 0);
+		drawitem(r, startitems[i].label, 0);
 	}
 	flushimage(display, 1);
 	lasthover = -1;
@@ -296,12 +301,12 @@ menumode(void)
 			if(lasthover >= 0){
 				r = Rect(screen->r.min.x+3, screen->r.min.y+3+lasthover*Menuh,
 					screen->r.max.x-3, screen->r.min.y+3+(lasthover+1)*Menuh);
-				drawitem(r, items[lasthover], 0);
+				drawitem(r, startitems[lasthover].label, 0);
 			}
 			if(hover >= 0){
 				r = Rect(screen->r.min.x+3, screen->r.min.y+3+hover*Menuh,
 					screen->r.max.x-3, screen->r.min.y+3+(hover+1)*Menuh);
-				drawitem(r, items[hover], 1);
+				drawitem(r, startitems[hover].label, 1);
 			}
 			flushimage(display, 1);
 			lasthover = hover;
@@ -315,20 +320,7 @@ menumode(void)
 			exits(nil);
 		break;
 	}
-	switch(sel){
-	case 0:
-		run("rc -i");
-		break;
-	case 1:
-		run("acme");
-		break;
-	case 2:
-		run("stats -lmisce");
-		break;
-	case 3:
-		run("q9kbsetup -reset");
-		break;
-	}
+	run(startitems[sel].cmd);
 	exits(nil);
 }
 
