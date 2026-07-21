@@ -204,6 +204,150 @@ clickwindow(int but, Mousectl *mc)
 	return w;
 }
 
+enum {
+	Snapdist = 24,
+};
+
+static int
+near(int a, int b)
+{
+	return abs(a-b) <= Snapdist;
+}
+
+static Rectangle
+halfof(Rectangle r, int side)
+{
+	int mx, my;
+
+	mx = (r.min.x+r.max.x)/2;
+	my = (r.min.y+r.max.y)/2;
+	switch(side){
+	case 0: return Rect(r.min.x, r.min.y, mx, r.max.y);
+	case 1: return Rect(mx, r.min.y, r.max.x, r.max.y);
+	case 2: return Rect(r.min.x, r.min.y, r.max.x, my);
+	case 3: return Rect(r.min.x, my, r.max.x, r.max.y);
+	case 4: return Rect(r.min.x, r.min.y, mx, my);
+	case 5: return Rect(mx, r.min.y, r.max.x, my);
+	case 6: return Rect(r.min.x, my, mx, r.max.y);
+	case 7: return Rect(mx, my, r.max.x, r.max.y);
+	}
+	return r;
+}
+
+static void
+snapdelta(int *best, int d)
+{
+	if(abs(d) <= Snapdist && abs(d) < abs(*best))
+		*best = d;
+}
+
+static void
+snaptowindowedges(Window *w, Rectangle r, int *dx, int *dy)
+{
+	Window *t;
+	Rectangle tr;
+
+	for(t = bottomwin; t; t = t->higher){
+		if(t == w || t->hidden || Dx(t->frame->r) <= 0 || Dy(t->frame->r) <= 0)
+			continue;
+		tr = t->frame->r;
+		if(rectXrect(Rect(r.min.x, r.min.y, r.max.x, r.max.y), Rect(tr.min.x-Snapdist, tr.min.y, tr.max.x+Snapdist, tr.max.y))){
+			snapdelta(dx, tr.min.x-r.min.x);
+			snapdelta(dx, tr.max.x-r.min.x);
+			snapdelta(dx, tr.min.x-r.max.x);
+			snapdelta(dx, tr.max.x-r.max.x);
+		}
+		if(rectXrect(Rect(r.min.x, r.min.y, r.max.x, r.max.y), Rect(tr.min.x, tr.min.y-Snapdist, tr.max.x, tr.max.y+Snapdist))){
+			snapdelta(dy, tr.min.y-r.min.y);
+			snapdelta(dy, tr.max.y-r.min.y);
+			snapdelta(dy, tr.min.y-r.max.y);
+			snapdelta(dy, tr.max.y-r.max.y);
+		}
+	}
+}
+
+static Rectangle
+snapmove(Window *w, Rectangle r)
+{
+	Rectangle wr;
+	int left, right, top, bottom, dx, dy;
+
+	wr = panelworkrect();
+	left = near(r.min.x, wr.min.x);
+	right = near(r.max.x, wr.max.x);
+	top = near(r.min.y, wr.min.y);
+	bottom = near(r.max.y, wr.max.y);
+	if(top && left)
+		return halfof(wr, 4);
+	if(top && right)
+		return halfof(wr, 5);
+	if(bottom && left)
+		return halfof(wr, 6);
+	if(bottom && right)
+		return halfof(wr, 7);
+	if(left)
+		return halfof(wr, 0);
+	if(right)
+		return halfof(wr, 1);
+	if(top)
+		return wr;
+	if(bottom)
+		return halfof(wr, 3);
+
+	dx = dy = Snapdist+1;
+	snapdelta(&dx, wr.min.x-r.min.x);
+	snapdelta(&dx, wr.max.x-r.max.x);
+	snapdelta(&dy, wr.min.y-r.min.y);
+	snapdelta(&dy, wr.max.y-r.max.y);
+	snaptowindowedges(w, r, &dx, &dy);
+	if(abs(dx) <= Snapdist)
+		r = rectaddpt(r, Pt(dx, 0));
+	if(abs(dy) <= Snapdist)
+		r = rectaddpt(r, Pt(0, dy));
+	return r;
+}
+
+static void
+snapside(int *p, int target)
+{
+	if(near(*p, target))
+		*p = target;
+}
+
+static Rectangle
+snapresize(Window *w, Rectangle r)
+{
+	Window *t;
+	Rectangle tr, wr, or;
+
+	or = r;
+	wr = panelworkrect();
+	snapside(&r.min.x, wr.min.x);
+	snapside(&r.max.x, wr.max.x);
+	snapside(&r.min.y, wr.min.y);
+	snapside(&r.max.y, wr.max.y);
+	for(t = bottomwin; t; t = t->higher){
+		if(t == w || t->hidden || Dx(t->frame->r) <= 0 || Dy(t->frame->r) <= 0)
+			continue;
+		tr = t->frame->r;
+		if(r.max.y > tr.min.y && r.min.y < tr.max.y){
+			snapside(&r.min.x, tr.min.x);
+			snapside(&r.min.x, tr.max.x);
+			snapside(&r.max.x, tr.min.x);
+			snapside(&r.max.x, tr.max.x);
+		}
+		if(r.max.x > tr.min.x && r.min.x < tr.max.x){
+			snapside(&r.min.y, tr.min.y);
+			snapside(&r.min.y, tr.max.y);
+			snapside(&r.max.y, tr.min.y);
+			snapside(&r.max.y, tr.max.y);
+		}
+	}
+	if(goodrect(canonrect(r)))
+		return canonrect(r);
+	return or;
+}
+
 Rectangle
 dragrect(int but, Rectangle r, Mousectl *mc)
 {
@@ -360,7 +504,11 @@ grab(Window *w, int btn)
 	else{
 		Rectangle r = dragrect(btn, w->frame->r, mctl);
 		if((Dx(r) > 0 || Dy(r) > 0) && !eqrect(r, w->frame->r)){
-			wmove(w, r.min);
+			r = snapmove(w, r);
+			if(eqrect(r, panelworkrect()))
+				wmaximize(w);
+			else
+				wresize(w, r);
 			wfocus(w);
 			flushimage(display, 1);
 		}
@@ -396,6 +544,7 @@ bandresize(Window *w)
 	Rectangle r;
 	r = bandrect(w->frame->r, mctl->buttons, mctl);
 	if(!eqrect(r, w->frame->r)){
+		r = snapresize(w, r);
 		wresize(w, r);
 		flushimage(display, 1);
 	}

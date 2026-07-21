@@ -41,7 +41,8 @@ case terminal
 			. /cfg/q9/run.rc
 		exec rc
 	}
-		exec lola -theme win2k -i riostart
+	echo q9: gui ready
+	exec lola -theme win2k -i riostart
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev

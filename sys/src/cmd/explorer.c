@@ -183,6 +183,18 @@ runentry(char *path)
 	close(fd);
 }
 
+void
+openfile(char *path)
+{
+	int fd;
+
+	fd = open("/dev/wctl", OWRITE);
+	if(fd < 0)
+		return;
+	fprint(fd, "new -r 90 100 790 570 acme %s", path);
+	close(fd);
+}
+
 int
 iconitemat(Point p)
 {
@@ -488,11 +500,13 @@ openrow(Point p)
 		i = iconitemat(p);
 	else
 		i = scroll + (p.y - (lr.min.y+27))/Rowh;
-	if(i < 0 || i >= nents || !ents[i].isdir)
+	if(i < 0 || i >= nents)
 		return;
 	cleanpath(path, sizeof path, cwd, ents[i].name);
-	if(loaddir(path) == 0)
+	if(ents[i].isdir && loaddir(path) == 0)
 		redraw();
+	else if(!ents[i].isdir)
+		openfile(path);
 }
 
 int
@@ -524,6 +538,7 @@ main(int argc, char **argv)
 {
 	Event e;
 	char path[Maxpath];
+	int buttons;
 
 	ARGBEGIN{
 	default:
@@ -548,20 +563,22 @@ main(int argc, char **argv)
 	if(loaddir(path) < 0)
 		sysfatal("open %s: %r", path);
 	redraw();
+	buttons = 0;
 	for(;;){
 		switch(event(&e)){
 		case Emouse:
-			if(e.mouse.buttons & 1)
+			if((e.mouse.buttons & 1) && !(buttons & 1))
 				if(!toolbar(e.mouse.xy) && !opentree(e.mouse.xy))
 					openrow(e.mouse.xy);
-			if(e.mouse.buttons & 8 && scroll > 0){
+			if((e.mouse.buttons & 8) && !(buttons & 8) && scroll > 0){
 				scroll--;
 				redraw();
 			}
-			if(e.mouse.buttons & 16 && scroll+1 < nents){
+			if((e.mouse.buttons & 16) && !(buttons & 16) && scroll+1 < nents){
 				scroll++;
 				redraw();
 			}
+			buttons = e.mouse.buttons;
 			break;
 		case Ekeyboard:
 			if(e.kbdc == 'v'){
