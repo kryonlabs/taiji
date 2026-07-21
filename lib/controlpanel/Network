@@ -1,0 +1,9 @@
+#!/bin/rc
+echo Control Panel - Network
+echo
+echo Interfaces:
+ip/ipconfig
+echo
+echo Services:
+ls /srv
+rc -i

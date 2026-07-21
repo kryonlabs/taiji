@@ -73,7 +73,8 @@ win95wdecor(Window *w)
 		return;
 
 	int inact = w != focused;
-	Rectangle r;
+		Rectangle r;
+		Rectangle ir;
 
 	if(!w->noborder){
 		r = w->rect;
@@ -93,10 +94,11 @@ win95wdecor(Window *w)
 		winbtn(w->frame, br, btnmasks[3], 0);
 		br = rectaddpt(br, Pt(-Dx(br)-2, 0));
 		winbtn(w->frame, br, btnmasks[1+w->maximized], 0);
-		br = rectaddpt(br, Pt(-Dx(br), 0));
+		br = rectaddpt(br, Pt(-Dx(br)-2, 0));
 		winbtn(w->frame, br, btnmasks[0], 0);
 
-		br = rectaddpt(appicon->r, insetrect(r,1).min);
+		ir = insetrect(r, 1);
+		br = rectaddpt(appicon->r, ir.min);
 		draw(w->frame, br, appicon, nil, ZP);
 
 		Point pt = Pt(r.min.x + 2 + titlesz-1, r.min.y + (Dy(r)-font->height)/2);
@@ -140,7 +142,7 @@ win95wtitlectl(Window *w)
 			Rectangle br1 = insetrect(r, 2);
 			br1.min.x = br1.max.x - Dy(br1) - 2;
 			Rectangle br2 = rectaddpt(br1, Pt(-Dx(br1)-2, 0));
-			Rectangle br3 = rectaddpt(br1, Pt(-2*Dx(br1)-2, 0));
+			Rectangle br3 = rectaddpt(br2, Pt(-Dx(br2)-2, 0));
 
 			if(ptinrect(mctl->xy, br1)){
 				if(winbtnctl(w->frame, br1, btnmasks[3]))

@@ -1,0 +1,8 @@
+#!/bin/rc
+echo Control Panel - Fonts
+echo
+echo Default font: `{basename $font}
+echo
+echo Available font directories:
+ls /lib/font/bit
+rc -i

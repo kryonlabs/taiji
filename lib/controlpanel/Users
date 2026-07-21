@@ -1,0 +1,7 @@
+#!/bin/rc
+echo Control Panel - Users
+echo
+echo Current user: $user
+echo Home: $home
+echo Profile: /usr/glenda/lib/profile
+rc -i

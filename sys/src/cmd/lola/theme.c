@@ -20,9 +20,10 @@ static Theme themes[] = {
 	{ "simple", 4, 17, 18, simplewdecor, simplewtitlectl, simpleinittheme },
 	{ "win3", 4, 19, 23, win3wdecor, win3wtitlectl, win3inittheme },
 	{ "win95", 4, 19, 20, win95wdecor, win95wtitlectl, win95inittheme },
+	{ "win2k", 4, 19, 20, win95wdecor, win95wtitlectl, win95inittheme },
 };
 
-static Theme *theme = &themes[1];
+static Theme *theme = &themes[4];
 
 static void
 applytheme(Theme *t)

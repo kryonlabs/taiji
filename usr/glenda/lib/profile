@@ -41,9 +41,7 @@ case terminal
 			. /cfg/q9/run.rc
 		exec rc
 	}
-		if(grep -s -e -theme /bin/lola)
-			exec lola -nopanel -theme win95 -i riostart
-		exec lola -i riostart
+		exec lola -theme win2k -i riostart
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev
@@ -58,9 +56,7 @@ case cpu
 	news
 	if (! test -e /mnt/term/mnt/wsys) {	# cpu call from drawterm
 		font=/lib/font/bit/pelm/latin1.8.font
-		if(grep -s -e -theme /bin/lola)
-			exec lola -nopanel -theme win95
-		exec lola
+		exec lola -theme win2k
 	}
 case con
 	prompt=('cpu% ' '	')

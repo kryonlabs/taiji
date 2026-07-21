@@ -1,0 +1,8 @@
+#!/bin/rc
+echo Control Panel - Date/Time
+echo
+date
+echo
+echo Timezone:
+cat /adm/timezone/local >[2]/dev/null
+rc -i

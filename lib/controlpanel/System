@@ -1,0 +1,8 @@
+#!/bin/rc
+echo Control Panel - System
+echo
+echo CPU type: $cputype
+echo Object type: $objtype
+echo Service: $service
+echo Window system: lola
+rc -i

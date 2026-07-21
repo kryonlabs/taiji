@@ -1,0 +1,7 @@
+#!/bin/rc
+if(test -x /bin/q9kbsetup)
+	exec q9kbsetup -reset
+echo Control Panel - Keyboard
+echo
+echo q9kbsetup is not installed.
+rc -i

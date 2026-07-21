@@ -7,4 +7,4 @@ ht=$scr(12)
 if(~ $q9unix 1 && ! test -r $home/lib/kbmap)
 	window -r 20 60 500 340 q9kbsetup
 
-window -r 0 0 $wid 26 -noborder -notitle lpanel
+window -r 40 70 760 560 explorer /

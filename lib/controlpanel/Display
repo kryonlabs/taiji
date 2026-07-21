@@ -1,0 +1,10 @@
+#!/bin/rc
+echo Control Panel - Display
+echo
+echo Theme: win2k
+echo Resolution: $vgasize
+echo Font: `{basename $font}
+echo Desktop: classic teal
+echo
+echo Edit /usr/glenda/lib/profile to change the default session theme.
+rc -i
