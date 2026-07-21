@@ -267,16 +267,16 @@ snaptowindowedges(Window *w, Rectangle r, int *dx, int *dy)
 }
 
 static Rectangle
-snapmove(Window *w, Rectangle r)
+snapedge(Point p)
 {
-	Rectangle wr;
-	int left, right, top, bottom, dx, dy;
+	Rectangle wr, zr;
+	int left, right, top, bottom;
 
 	wr = panelworkrect();
-	left = near(r.min.x, wr.min.x);
-	right = near(r.max.x, wr.max.x);
-	top = near(r.min.y, wr.min.y);
-	bottom = near(r.max.y, wr.max.y);
+	left = p.x <= wr.min.x+Snapdist;
+	right = p.x >= wr.max.x-Snapdist;
+	top = p.y <= wr.min.y+Snapdist;
+	bottom = p.y >= wr.max.y-Snapdist;
 	if(top && left)
 		return halfof(wr, 4);
 	if(top && right)
@@ -293,7 +293,23 @@ snapmove(Window *w, Rectangle r)
 		return wr;
 	if(bottom)
 		return halfof(wr, 3);
+	zr = ZR;
+	zr.min.x = zr.max.x = 0;
+	zr.min.y = zr.max.y = 0;
+	return zr;
+}
 
+static Rectangle
+snapmove(Window *w, Rectangle r, Point p)
+{
+	Rectangle wr, sr;
+	int dx, dy;
+
+	sr = snapedge(p);
+	if(Dx(sr) > 0 && Dy(sr) > 0)
+		return sr;
+
+	wr = panelworkrect();
 	dx = dy = Snapdist+1;
 	snapdelta(&dx, wr.min.x-r.min.x);
 	snapdelta(&dx, wr.max.x-r.max.x);
@@ -349,17 +365,18 @@ snapresize(Window *w, Rectangle r)
 }
 
 Rectangle
-dragrect(int but, Rectangle r, Mousectl *mc)
+dragrect(Window *w, int but, Mousectl *mc)
 {
-	Rectangle rc;
+	Rectangle r, rc;
 	Point start, end;
 
+	r = w->frame->r;
 	but = 1<<(but-1);
 	setcursoroverride(&boxcursor, TRUE);
 	start = mc->xy;
 	end = mc->xy;
 	do{
-		rc = rectaddpt(r, subpt(end, start));
+		rc = snapmove(w, rectaddpt(r, subpt(end, start)), end);
 		drawgetrect(rc, 1);
 		readmouse(mc);
 		drawgetrect(rc, 0);
@@ -502,9 +519,8 @@ grab(Window *w, int btn)
 	if(w == nil)
 		setcursoroverride(nil, FALSE);
 	else{
-		Rectangle r = dragrect(btn, w->frame->r, mctl);
+		Rectangle r = dragrect(w, btn, mctl);
 		if((Dx(r) > 0 || Dy(r) > 0) && !eqrect(r, w->frame->r)){
-			r = snapmove(w, r);
 			if(eqrect(r, panelworkrect()))
 				wmaximize(w);
 			else
