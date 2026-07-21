@@ -1,4 +1,6 @@
 #!/bin/rc
+if(test -x /bin/faces)
+	faces
 echo Control Panel - Users
 echo
 echo Current user: $user

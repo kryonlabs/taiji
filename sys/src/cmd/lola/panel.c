@@ -501,7 +501,7 @@ panelmouse(Mousectl *mc)
 			return 1;
 		}
 		if(ptinrect(mc->xy, clockr)){
-			launch("catclock");
+			launch("clock");
 			drainmouse(mc, nil);
 			paneldraw();
 			return 1;

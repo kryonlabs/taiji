@@ -2,7 +2,7 @@
 echo Control Panel - Network
 echo
 echo Interfaces:
-ip/ipconfig
+ip/ipconfig >[2=1]
 echo
 echo Services:
 ls /srv

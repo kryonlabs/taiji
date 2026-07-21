@@ -11,7 +11,14 @@ enum {
 	Treew = 170,
 	Rowh = 18,
 	Btnw = 70,
+	Iconw = 108,
+	Iconh = 72,
 	Maxpath = 512,
+};
+
+enum {
+	ViewList,
+	ViewIcon,
 };
 
 typedef struct Entry Entry;
@@ -31,20 +38,20 @@ struct TreeItem {
 	Rectangle r;
 };
 
-Image *face, *light, *shadow, *dark, *white, *text, *hilite;
+Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow;
 Entry *ents;
 int nents;
 char cwd[Maxpath];
 int scroll;
 int selectedtree = -1;
+int viewmode = ViewList;
 TreeItem tree[] = {
 	{ "My Computer", "/", 10, 10 },
 	{ "Namespace", "/", 22, 32 },
 	{ "/", "/", 34, 54 },
 	{ "/mnt", "/mnt", 34, 76 },
 	{ "/usr/glenda", "/usr/glenda", 34, 98 },
-	{ "Desktop", "/usr/glenda", 22, 120 },
-	{ "Control Panel", "/lib/controlpanel", 34, 144 },
+	{ "Control Panel", "/lib/controlpanel", 22, 120 },
 };
 
 Rectangle listrect(void);
@@ -79,6 +86,37 @@ btn(Rectangle r, char *s)
 	draw(screen, r, face, nil, ZP);
 	bevel(r, 0);
 	string(screen, Pt(r.min.x+8, r.min.y+(Dy(r)-font->height)/2), text, ZP, font, s);
+}
+
+void
+drawfileicon(Rectangle r, int isdir, int big)
+{
+	Point p;
+
+	if(big){
+		p = Pt((r.min.x+r.max.x)/2-16, r.min.y+8);
+		if(isdir){
+			draw(screen, Rect(p.x, p.y+8, p.x+34, p.y+30), yellow, nil, ZP);
+			draw(screen, Rect(p.x+4, p.y+4, p.x+18, p.y+10), yellow, nil, ZP);
+			border(screen, Rect(p.x, p.y+8, p.x+34, p.y+30), 1, dark, ZP);
+		}else{
+			draw(screen, Rect(p.x+5, p.y+2, p.x+29, p.y+34), white, nil, ZP);
+			border(screen, Rect(p.x+5, p.y+2, p.x+29, p.y+34), 1, dark, ZP);
+			line(screen, Pt(p.x+10, p.y+12), Pt(p.x+24, p.y+12), 0, 0, 0, shadow, ZP);
+			line(screen, Pt(p.x+10, p.y+18), Pt(p.x+24, p.y+18), 0, 0, 0, shadow, ZP);
+		}
+		return;
+	}
+	if(isdir){
+		draw(screen, Rect(r.min.x+3, r.min.y+6, r.min.x+19, r.min.y+16), yellow, nil, ZP);
+		draw(screen, Rect(r.min.x+5, r.min.y+3, r.min.x+13, r.min.y+8), yellow, nil, ZP);
+		border(screen, Rect(r.min.x+3, r.min.y+6, r.min.x+19, r.min.y+16), 1, dark, ZP);
+	}else{
+		draw(screen, Rect(r.min.x+5, r.min.y+3, r.min.x+17, r.min.y+17), white, nil, ZP);
+		border(screen, Rect(r.min.x+5, r.min.y+3, r.min.x+17, r.min.y+17), 1, dark, ZP);
+		line(screen, Pt(r.min.x+8, r.min.y+8), Pt(r.min.x+14, r.min.y+8), 0, 0, 0, shadow, ZP);
+		line(screen, Pt(r.min.x+8, r.min.y+12), Pt(r.min.x+14, r.min.y+12), 0, 0, 0, shadow, ZP);
+	}
 }
 
 int
@@ -143,6 +181,30 @@ runentry(char *path)
 		return;
 	fprint(fd, "new -r 90 100 690 470 rc %s", path);
 	close(fd);
+}
+
+int
+iconitemat(Point p)
+{
+	Rectangle lr, r;
+	int i, x, y;
+
+	lr = listrect();
+	x = lr.min.x + 20;
+	y = lr.min.y + 20;
+	for(i = scroll; i < nents; i++){
+		r = Rect(x, y, x+Iconw, y+Iconh);
+		if(ptinrect(p, r))
+			return i;
+		x += Iconw + 14;
+		if(x+Iconw > lr.max.x-12){
+			x = lr.min.x + 20;
+			y += Iconh + 12;
+		}
+		if(y+Iconh > lr.max.y-8)
+			break;
+	}
+	return -1;
 }
 
 int
@@ -281,6 +343,7 @@ redraw(void)
 	btn(Rect(r.min.x+82, r.min.y+4, r.min.x+82+Btnw, r.max.y-4), "Up");
 	btn(Rect(r.min.x+158, r.min.y+4, r.min.x+158+Btnw+12, r.max.y-4), "Refresh");
 	btn(Rect(r.min.x+252, r.min.y+4, r.min.x+252+Btnw+18, r.max.y-4), "New Dir");
+	btn(Rect(r.min.x+352, r.min.y+4, r.min.x+352+Btnw, r.max.y-4), viewmode == ViewList ? "Icons" : "List");
 
 	r = Rect(screen->r.min.x, screen->r.min.y+Toolbarh, screen->r.max.x, screen->r.min.y+Toolbarh+Addrh);
 	draw(screen, r, face, nil, ZP);
@@ -324,6 +387,24 @@ redraw(void)
 		}
 		goto Status;
 	}
+	if(viewmode == ViewIcon){
+		x = lr.min.x + 20;
+		y = lr.min.y + 20;
+		for(i = scroll; i < nents; i++){
+			row = Rect(x, y, x+Iconw, y+Iconh);
+			drawfileicon(row, ents[i].isdir, 1);
+			string(screen, Pt(row.min.x+(Dx(row)-stringwidth(font, ents[i].name))/2,
+				row.min.y+48), text, ZP, font, ents[i].name);
+			x += Iconw + 14;
+			if(x+Iconw > lr.max.x-12){
+				x = lr.min.x + 20;
+				y += Iconh + 12;
+			}
+			if(y+Iconh > lr.max.y-8)
+				break;
+		}
+		goto Status;
+	}
 	row = Rect(lr.min.x+4, lr.min.y+4, lr.max.x-4, lr.min.y+24);
 	draw(screen, row, face, nil, ZP);
 	string(screen, Pt(row.min.x+8, row.min.y+4), text, ZP, font, "Name");
@@ -332,9 +413,7 @@ redraw(void)
 	y = row.max.y + 3;
 	for(i = scroll; i < nents && y+Rowh < lr.max.y-4; i++){
 		row = Rect(lr.min.x+4, y, lr.max.x-4, y+Rowh);
-		if(i == scroll)
-			draw(screen, row, hilite, nil, ZP);
-		string(screen, Pt(row.min.x+8, row.min.y+3), text, ZP, font, ents[i].isdir ? "[ ]" : " - ");
+		drawfileicon(row, ents[i].isdir, 0);
 		string(screen, Pt(row.min.x+34, row.min.y+3), text, ZP, font, ents[i].name);
 		if(ents[i].isdir)
 			snprint(buf, sizeof buf, "");
@@ -356,6 +435,37 @@ Status:
 	flushimage(display, 1);
 }
 
+int
+toolbar(Point p)
+{
+	Rectangle r;
+	char path[Maxpath];
+
+	r = Rect(screen->r.min.x+82, screen->r.min.y+4,
+		screen->r.min.x+82+Btnw, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		cleanpath(path, sizeof path, cwd, "..");
+		if(loaddir(path) == 0)
+			redraw();
+		return 1;
+	}
+	r = Rect(screen->r.min.x+158, screen->r.min.y+4,
+		screen->r.min.x+158+Btnw+12, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		loaddir(cwd);
+		redraw();
+		return 1;
+	}
+	r = Rect(screen->r.min.x+352, screen->r.min.y+4,
+		screen->r.min.x+352+Btnw, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		viewmode = viewmode == ViewList ? ViewIcon : ViewList;
+		redraw();
+		return 1;
+	}
+	return 0;
+}
+
 void
 openrow(Point p)
 {
@@ -374,7 +484,10 @@ openrow(Point p)
 		}
 		return;
 	}
-	i = scroll + (p.y - (lr.min.y+27))/Rowh;
+	if(viewmode == ViewIcon)
+		i = iconitemat(p);
+	else
+		i = scroll + (p.y - (lr.min.y+27))/Rowh;
 	if(i < 0 || i >= nents || !ents[i].isdir)
 		return;
 	cleanpath(path, sizeof path, cwd, ents[i].name);
@@ -430,6 +543,7 @@ main(int argc, char **argv)
 	white = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xFFFFFFFF);
 	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
 	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
+	yellow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xF8D878FF);
 	einit(Emouse|Ekeyboard);
 	if(loaddir(path) < 0)
 		sysfatal("open %s: %r", path);
@@ -438,7 +552,7 @@ main(int argc, char **argv)
 		switch(event(&e)){
 		case Emouse:
 			if(e.mouse.buttons & 1)
-				if(!opentree(e.mouse.xy))
+				if(!toolbar(e.mouse.xy) && !opentree(e.mouse.xy))
 					openrow(e.mouse.xy);
 			if(e.mouse.buttons & 8 && scroll > 0){
 				scroll--;
@@ -450,6 +564,10 @@ main(int argc, char **argv)
 			}
 			break;
 		case Ekeyboard:
+			if(e.kbdc == 'v'){
+				viewmode = viewmode == ViewList ? ViewIcon : ViewList;
+				redraw();
+			}
 			if(e.kbdc == 'q' || e.kbdc == Kdel)
 				exits(nil);
 			break;

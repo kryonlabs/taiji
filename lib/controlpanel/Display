@@ -1,4 +1,6 @@
 #!/bin/rc
+if(test -x /bin/colors)
+	colors
 echo Control Panel - Display
 echo
 echo Theme: win2k

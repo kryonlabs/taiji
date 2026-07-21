@@ -3,6 +3,10 @@ echo Control Panel - Fonts
 echo
 echo Default font: `{basename $font}
 echo
+echo Preview:
+echo '	The quick brown fox jumps over the lazy dog.'
+echo '	0123456789 !@#$%^&*()'
+echo
 echo Available font directories:
 ls /lib/font/bit
 rc -i

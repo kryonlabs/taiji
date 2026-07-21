@@ -1,4 +1,6 @@
 #!/bin/rc
+if(test -x /bin/clock)
+	clock
 echo Control Panel - Date/Time
 echo
 date

@@ -1,4 +1,6 @@
 #!/bin/rc
+if(test -x /bin/stats)
+	stats -lmisce
 echo Control Panel - System
 echo
 echo CPU type: $cputype

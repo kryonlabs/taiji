@@ -6,4 +6,7 @@ echo Buttons: Plan 9 chording
 echo Acceleration: system default
 echo
 echo Mouse settings are exposed through '#m/mousectl' where supported.
+echo
+echo Current mousectl:
+cat '#m/mousectl' >[2]/dev/null
 rc -i
