@@ -15,6 +15,7 @@ enum {
 };
 
 typedef struct Entry Entry;
+typedef struct TreeItem TreeItem;
 struct Entry {
 	char name[128];
 	char type[16];
@@ -22,12 +23,28 @@ struct Entry {
 	ulong mtime;
 	int isdir;
 };
+struct TreeItem {
+	char *label;
+	char *path;
+	int indent;
+	int y;
+	Rectangle r;
+};
 
 Image *face, *light, *shadow, *dark, *white, *text, *hilite;
 Entry *ents;
 int nents;
 char cwd[Maxpath];
 int scroll;
+TreeItem tree[] = {
+	{ "Desktop", "/usr/glenda", 10, 10 },
+	{ "My Computer", "/", 22, 32 },
+	{ "Namespace", "/", 34, 54 },
+	{ "/", "/", 46, 76 },
+	{ "/mnt", "/mnt", 46, 98 },
+	{ "/usr/glenda", "/usr/glenda", 46, 120 },
+	{ "Control Panel", "/lib/controlpanel", 34, 144 },
+};
 
 Rectangle listrect(void);
 
@@ -162,26 +179,26 @@ cleanpath(char *dst, int ndst, char *base, char *name)
 	strecpy(dst, dst+ndst, buf);
 }
 
-void
+int
 loaddir(char *path)
 {
 	Dir *d;
 	int fd, i, n, off;
 
-	free(ents);
-	ents = nil;
-	nents = 0;
 	fd = open(path, OREAD);
 	if(fd < 0)
-		return;
+		return -1;
 	n = dirreadall(fd, &d);
 	close(fd);
 	if(n < 0)
-		return;
+		return -1;
+	free(ents);
+	ents = nil;
+	nents = 0;
 	ents = malloc((n+1)*sizeof(Entry));
 	if(ents == nil){
 		free(d);
-		return;
+		return -1;
 	}
 	off = 0;
 	strecpy(ents[off].name, ents[off].name+sizeof ents[off].name, "..");
@@ -203,6 +220,7 @@ loaddir(char *path)
 	scroll = 0;
 	strecpy(cwd, cwd+sizeof cwd, path);
 	free(d);
+	return 0;
 }
 
 Rectangle
@@ -220,15 +238,20 @@ listrect(void)
 void
 drawtree(Rectangle r)
 {
+	int i;
+	Point p;
+
 	draw(screen, r, white, nil, ZP);
 	bevel(r, 1);
-	string(screen, Pt(r.min.x+10, r.min.y+10), text, ZP, font, "Desktop");
-	string(screen, Pt(r.min.x+22, r.min.y+32), text, ZP, font, "My Computer");
-	string(screen, Pt(r.min.x+34, r.min.y+54), text, ZP, font, "Namespace");
-	string(screen, Pt(r.min.x+46, r.min.y+76), text, ZP, font, "/");
-	string(screen, Pt(r.min.x+46, r.min.y+98), text, ZP, font, "/mnt");
-	string(screen, Pt(r.min.x+46, r.min.y+120), text, ZP, font, "/usr/glenda");
-	string(screen, Pt(r.min.x+34, r.min.y+144), text, ZP, font, "Control Panel");
+	for(i = 0; i < nelem(tree); i++){
+		p = Pt(r.min.x+tree[i].indent, r.min.y+tree[i].y);
+		tree[i].r = Rect(r.min.x+4, p.y-3, r.max.x-4, p.y+font->height+3);
+		if(strcmp(cwd, tree[i].path) == 0){
+			draw(screen, tree[i].r, hilite, nil, ZP);
+			border(screen, tree[i].r, 1, shadow, ZP);
+		}
+		string(screen, p, text, ZP, font, tree[i].label);
+	}
 }
 
 void
@@ -342,8 +365,22 @@ openrow(Point p)
 	if(i < 0 || i >= nents || !ents[i].isdir)
 		return;
 	cleanpath(path, sizeof path, cwd, ents[i].name);
-	loaddir(path);
-	redraw();
+	if(loaddir(path) == 0)
+		redraw();
+}
+
+int
+opentree(Point p)
+{
+	int i;
+
+	for(i = 0; i < nelem(tree); i++)
+		if(ptinrect(p, tree[i].r)){
+			if(loaddir(tree[i].path) == 0)
+				redraw();
+			return 1;
+		}
+	return 0;
 }
 
 void
@@ -379,13 +416,15 @@ main(int argc, char **argv)
 	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
 	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
 	einit(Emouse|Ekeyboard);
-	loaddir(path);
+	if(loaddir(path) < 0)
+		sysfatal("open %s: %r", path);
 	redraw();
 	for(;;){
 		switch(event(&e)){
 		case Emouse:
 			if(e.mouse.buttons & 1)
-				openrow(e.mouse.xy);
+				if(!opentree(e.mouse.xy))
+					openrow(e.mouse.xy);
 			if(e.mouse.buttons & 8 && scroll > 0){
 				scroll--;
 				redraw();

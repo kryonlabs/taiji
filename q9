@@ -10,9 +10,13 @@ rundir=cfg/q9
 runrc=$rundir/run.rc
 seriallog=$state/serial.log
 serialsock=$root/$state/serial.sock
+monitorsock=$root/$state/monitor.sock
+sessionstate=$root/$state/session.vmstate
+sessiontmp=$root/$state/session.vmstate.tmp
 buildlog=$state/build.log
 qemulog=$state/qemu.log
 socatlog=$state/socat.log
+monitorlog=$state/monitor.log
 
 qemu=${QEMU:-qemu-system-x86_64}
 image=${Q9_IMAGE:-boot/pxeboot.raw}
@@ -23,18 +27,26 @@ mem=${Q9_MEM:-1G}
 smp=${Q9_SMP:-1}
 boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
+textonly=false
+autosave=${Q9_AUTOSAVE:-1}
+fresh=false
 
 usage()
 {
 	status=${1:-1}
 	cat >&2 <<EOF
-usage: ./q9 [--text] [--mini] [--raw] [--smp n] [console|shell|gui]
+usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
        ./q9 [--text] [--mini] [--raw] [--smp n] run command
+       ./q9 [--mini] [--raw] [--smp n] tty-run command
        ./q9 [--mini] [--raw] [--smp n] acme|rio|lola [args...]
 
 Default mode boots Glenda's normal graphical Plan 9 profile.
+Default graphical mode resumes boot/q9/session.vmstate when present and
+autosaves that session on shutdown, window close, or Ctrl-C.
 
-Use --text or shell to boot a clean rc console with a QEMU display available.
+Use --text, tty, or shell to boot a clean rc console on QEMU serial stdio.
+Use --fresh to ignore the saved graphical session for this run.
+Use --no-autosave or Q9_AUTOSAVE=0 to disable session save/resume.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
@@ -62,6 +74,14 @@ while [ $# -gt 0 ]; do
 		;;
 	--raw)
 		raw=true
+		shift
+		;;
+	--fresh)
+		fresh=true
+		shift
+		;;
+	--no-autosave)
+		autosave=0
 		shift
 		;;
 	--smp)
@@ -100,10 +120,17 @@ gui)
 	profile=true
 	mac=$guimac
 	;;
-shell|text|sh)
+shell|text|tty|sh)
 	mode=console
 	profile=false
 	mac=$textmac
+	textonly=true
+	;;
+tty-run)
+	mode=run
+	profile=false
+	mac=$textmac
+	textonly=true
 	;;
 acme|rio|lola)
 	set -- "$mode" "$@"
@@ -154,7 +181,17 @@ clear_runrc()
 
 cleanup_runtime()
 {
-	rm -f "$serialsock"
+	rm -f "$serialsock" "$monitorsock"
+}
+
+qemu_autosave()
+{
+	[ "$autosave" = 1 ] || return 1
+	[ "$profile" = true ] || return 1
+	[ "$mode" = console ] || return 1
+	[ "$raw" != true ] || return 1
+	[ "$textonly" != true ] || return 1
+	return 0
 }
 
 wait_for_socket()
@@ -171,20 +208,105 @@ wait_for_socket()
 	return 1
 }
 
+wait_for_monitor()
+{
+	i=0
+	while [ "$i" -lt 10 ]; do
+		if [ -S "$monitorsock" ]; then
+			return 0
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo "q9: timed out waiting for QEMU monitor: $monitorsock" >&2
+	return 1
+}
+
+hmp()
+{
+	printf '%s\n' "$1" | socat - "UNIX-CONNECT:$monitorsock" 2>>"$monitorlog"
+}
+
+save_session()
+{
+	i=0
+
+	[ "${qemupid:-}" ] || return 0
+	kill -0 "$qemupid" 2>/dev/null || return 0
+	wait_for_monitor || return 0
+	rm -f "$sessiontmp"
+	{
+		printf 'stop\n'
+		printf 'migrate "exec:cat > %s"\n' "$sessiontmp"
+	} | socat - "UNIX-CONNECT:$monitorsock" >>"$monitorlog" 2>&1 || return 0
+	while [ "$i" -lt 60 ]; do
+		if hmp 'info migrate' | grep -qi 'completed'; then
+			if [ -s "$sessiontmp" ]; then
+				mv "$sessiontmp" "$sessionstate"
+				echo "q9: saved session: $sessionstate" >&2
+			fi
+			hmp 'quit' >/dev/null 2>&1 || true
+			return 0
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo 'q9: timed out while saving session' >&2
+	rm -f "$sessiontmp"
+}
+
+watch_autosave()
+{
+	wait_for_monitor || return 0
+	while kill -0 "$qemupid" 2>/dev/null; do
+		if hmp 'info status' | grep -qi 'status: paused'; then
+			save_session
+			return 0
+		fi
+		sleep 1
+	done
+	return 0
+}
+
 qemu_common()
 {
 	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
 	tftp="tftp=$root"
-	"$qemu" -m "$mem" -smp "$smp" \
-		-drive file="$root/$image",format=raw -snapshot \
-		-device "virtio-net-pci,netdev=net0,mac=$mac" \
-		-netdev "user,id=net0,$u9fs,$tftp" "$@"
+	if qemu_autosave; then
+		if [ "$fresh" != true ] && [ -s "$sessionstate" ]; then
+			"$qemu" -m "$mem" -smp "$smp" \
+				-drive file="$root/$image",format=raw -snapshot \
+				-device "virtio-net-pci,netdev=net0,mac=$mac" \
+				-netdev "user,id=net0,$u9fs,$tftp" \
+				-monitor "unix:$monitorsock,server=on,wait=off" \
+				-display gtk,window-close=on \
+				-action shutdown=pause -no-shutdown \
+				-incoming "exec:cat $sessionstate" "$@"
+		else
+			"$qemu" -m "$mem" -smp "$smp" \
+				-drive file="$root/$image",format=raw -snapshot \
+				-device "virtio-net-pci,netdev=net0,mac=$mac" \
+				-netdev "user,id=net0,$u9fs,$tftp" \
+				-monitor "unix:$monitorsock,server=on,wait=off" \
+				-display gtk,window-close=on \
+				-action shutdown=pause -no-shutdown "$@"
+		fi
+	else
+		"$qemu" -m "$mem" -smp "$smp" \
+			-drive file="$root/$image",format=raw -snapshot \
+			-device "virtio-net-pci,netdev=net0,mac=$mac" \
+			-netdev "user,id=net0,$u9fs,$tftp" "$@"
+	fi
 }
 
 run_foreground()
 {
 	build_u9fs
-	qemu_common -serial stdio
+	if [ "$textonly" = true ]; then
+		qemu_common -display none -serial stdio
+	else
+		qemu_common -serial stdio
+	fi
 }
 
 wait_for_prompt()
@@ -216,17 +338,40 @@ run_clean()
 		exit 1
 	fi
 	build_u9fs
-	rm -f "$seriallog" "$serialsock"
-	qemu_common \
-		-chardev "socket,id=serial0,path=$serialsock,server=on,wait=on" \
-		-serial chardev:serial0 \
-		-monitor none >"$qemulog" 2>&1 &
+	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"
+	if [ "$textonly" = true ]; then
+		qemu_common \
+			-display none \
+			-chardev "socket,id=serial0,path=$serialsock,server=on,wait=on" \
+			-serial chardev:serial0 \
+			-monitor none >"$qemulog" 2>&1 &
+	else
+		if qemu_autosave; then
+			qemu_common \
+				-chardev "socket,id=serial0,path=$serialsock,server=on,wait=on" \
+				-serial chardev:serial0 >"$qemulog" 2>&1 &
+		else
+			qemu_common \
+				-chardev "socket,id=serial0,path=$serialsock,server=on,wait=on" \
+				-serial chardev:serial0 \
+				-monitor none >"$qemulog" 2>&1 &
+		fi
+	fi
 	qemupid=$!
 	wait_for_socket
 	: >"$seriallog"
 	socat -u "UNIX-CONNECT:$serialsock" "OPEN:$seriallog,creat,append" 2>"$socatlog" &
 	logpid=$!
-	trap 'kill -TERM "${logpid:-}" "$qemupid" 2>/dev/null || true; wait "${logpid:-}" 2>/dev/null || true; wait "$qemupid" 2>/dev/null || true; cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+	if qemu_autosave; then
+		if [ "$fresh" != true ] && [ -s "$sessionstate" ]; then
+			wait_for_monitor && hmp 'cont' >/dev/null 2>&1 || true
+		fi
+		watch_autosave &
+		watchpid=$!
+	else
+		watchpid=
+	fi
+	trap 'if qemu_autosave; then save_session; fi; kill -TERM "${watchpid:-}" "${logpid:-}" "$qemupid" 2>/dev/null || true; wait "${watchpid:-}" "${logpid:-}" 2>/dev/null || true; wait "$qemupid" 2>/dev/null || true; cleanup_runtime; clear_runrc' EXIT HUP INT TERM
 	wait_for_prompt
 	kill -TERM "$logpid" 2>/dev/null || true
 	wait "$logpid" 2>/dev/null || true

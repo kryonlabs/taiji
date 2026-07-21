@@ -10,10 +10,14 @@ sys/log
 sys/src/cmd/unix/u9fs/u9fs
 boot/q9/build.log
 boot/q9/monitor
+boot/q9/monitor.log
+boot/q9/monitor.sock
 boot/q9/qemu.log
 boot/q9/qemu.pid
 boot/q9/socat.log
 boot/q9/serial.log
 boot/q9/serial.sock
+boot/q9/session.vmstate
+boot/q9/session.vmstate.tmp
 cfg/q9/run.rc
 cfg/q9/run.rc.*
