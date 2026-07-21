@@ -8,20 +8,32 @@ Examples:
 
 	./q9
 	./q9 --text
+	./q9 tty
 	./q9 --smp 2
 	./q9 acme
 	./q9 lola -theme win95
 	./q9 run 'rio'
+	./q9 tty-run 'pwd; ls /sys/src/cmd'
 	./q9 run 'lola -theme win95'
 	./q9 run 'cd /sys/src/cmd/lola && mk install'
 	./q9 --raw
 
-Use `./q9 --text` when you want the q9 shell-first profile.  That profile
-leaves you at `term%` instead of starting the window system at boot.
+Use `./q9 tty`, `./q9 shell`, or `./q9 --text` when you want the q9
+shell-first profile.  That profile leaves you at `term%` on the serial
+stdio console instead of starting the window system at boot.
 
-From the Plan 9 prompt in `--text` mode, run `rio`, `lola`, `acme`, or
-any other command normally.  The QEMU display is already available, so
-graphical programs can draw when you launch them from the shell.
+From the Plan 9 prompt in tty mode, run `startwm`, `startlola`,
+`startrio`, `lola`, `rio`, `acme`, or any other command normally.  Use
+`./q9 lola`, `./q9 rio`, or `./q9 acme` when you want a graphical QEMU
+display from startup.  The `startwm` helper starts `lola` by default and
+falls back to `rio` if `lola` is unavailable:
+
+	startwm
+	startwm rio
+	startwm acme
+
+The start helpers do not replace the shell, so exiting the graphical
+program returns to the same tty session.
 
 The q9 PXE profile also sets `nousbboot=1` and `q9fast=1`, which skip
 boot and terminal startup work that is slow and not useful for this VM,

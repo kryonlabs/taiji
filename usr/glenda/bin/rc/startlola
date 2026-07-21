@@ -1,0 +1,11 @@
+#!/bin/rc
+
+if(! test -x /bin/lola){
+	echo 'startlola: /bin/lola not found' >[1=2]
+	exit notfound
+}
+
+if(grep -s -e -theme /bin/lola)
+	lola -theme win2k -i riostart $*
+if not
+	lola -i riostart $*

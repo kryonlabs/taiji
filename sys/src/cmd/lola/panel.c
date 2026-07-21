@@ -60,6 +60,7 @@ static Image *menubackup;
 static Image *submenubackup;
 static Rectangle menur;
 static Rectangle submenur;
+static Rectangle clockr;
 static int menuopen;
 static int submenuopen;
 static int menuhover = -1;
@@ -254,12 +255,12 @@ paneldraw(void)
 		button(r, w->cur->label, -1, w == focused);
 	}
 
-	r = Rect(panelr.max.x-TrayWidth+4, panelr.min.y+4, panelr.max.x-4, panelr.max.y-4);
-	winborder(screen, r, shadow, hilite);
-	draw(screen, insetrect(r, 1), face, nil, ZP);
+	clockr = Rect(panelr.max.x-TrayWidth+4, panelr.min.y+4, panelr.max.x-4, panelr.max.y-4);
+	winborder(screen, clockr, shadow, hilite);
+	draw(screen, insetrect(clockr, 1), face, nil, ZP);
 	tm = localtime(time(0));
 	snprint(clock, sizeof clock, "%02d:%02d", tm->hour, tm->min);
-	string(screen, Pt(r.min.x+18, r.min.y+(Dy(r)-font->height)/2),
+	string(screen, Pt(clockr.min.x+18, clockr.min.y+(Dy(clockr)-font->height)/2),
 		display->black, ZP, font, clock);
 }
 
@@ -495,6 +496,12 @@ panelmouse(Mousectl *mc)
 		r = rectaddpt(r, Pt(28, 0));
 		if(ptinrect(mc->xy, r)){
 			launch("controlpanel");
+			drainmouse(mc, nil);
+			paneldraw();
+			return 1;
+		}
+		if(ptinrect(mc->xy, clockr)){
+			launch("catclock");
 			drainmouse(mc, nil);
 			paneldraw();
 			return 1;

@@ -36,17 +36,29 @@ Entry *ents;
 int nents;
 char cwd[Maxpath];
 int scroll;
+int selectedtree = -1;
 TreeItem tree[] = {
-	{ "Desktop", "/usr/glenda", 10, 10 },
-	{ "My Computer", "/", 22, 32 },
-	{ "Namespace", "/", 34, 54 },
-	{ "/", "/", 46, 76 },
-	{ "/mnt", "/mnt", 46, 98 },
-	{ "/usr/glenda", "/usr/glenda", 46, 120 },
+	{ "My Computer", "/", 10, 10 },
+	{ "Namespace", "/", 22, 32 },
+	{ "/", "/", 34, 54 },
+	{ "/mnt", "/mnt", 34, 76 },
+	{ "/usr/glenda", "/usr/glenda", 34, 98 },
+	{ "Desktop", "/usr/glenda", 22, 120 },
 	{ "Control Panel", "/lib/controlpanel", 34, 144 },
 };
 
 Rectangle listrect(void);
+
+void
+settreeforpath(char *path)
+{
+	int i;
+
+	selectedtree = -1;
+	for(i = 0; i < nelem(tree); i++)
+		if(strcmp(path, tree[i].path) == 0)
+			selectedtree = i;
+}
 
 void
 bevel(Rectangle r, int down)
@@ -219,6 +231,7 @@ loaddir(char *path)
 	nents = off;
 	scroll = 0;
 	strecpy(cwd, cwd+sizeof cwd, path);
+	settreeforpath(cwd);
 	free(d);
 	return 0;
 }
@@ -246,7 +259,7 @@ drawtree(Rectangle r)
 	for(i = 0; i < nelem(tree); i++){
 		p = Pt(r.min.x+tree[i].indent, r.min.y+tree[i].y);
 		tree[i].r = Rect(r.min.x+4, p.y-3, r.max.x-4, p.y+font->height+3);
-		if(strcmp(cwd, tree[i].path) == 0){
+		if(i == selectedtree){
 			draw(screen, tree[i].r, hilite, nil, ZP);
 			border(screen, tree[i].r, 1, shadow, ZP);
 		}
@@ -376,8 +389,10 @@ opentree(Point p)
 
 	for(i = 0; i < nelem(tree); i++)
 		if(ptinrect(p, tree[i].r)){
-			if(loaddir(tree[i].path) == 0)
+			if(loaddir(tree[i].path) == 0){
+				selectedtree = i;
 				redraw();
+			}
 			return 1;
 		}
 	return 0;
