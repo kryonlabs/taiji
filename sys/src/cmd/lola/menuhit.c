@@ -100,31 +100,6 @@ paintitem(Image *m, Menu *menu, Rectangle textr, int off, int i, int highlight, 
 	string(m, pt, highlight? htext : text, pt, font, item);
 }
 
-/*
- * menur is a rectangle holding all the highlightable text elements.
- * track mouse while inside the box, return what's selected when button
- * is raised, -1 as soon as it leaves box.
- * invariant: nothing is highlighted on entry or exit.
- */
-static int
-menuscan(Image *m, Menu *menu, int but, Mousectl *mc, Rectangle textr, int off, int lasti, Image *save)
-{
-	int i;
-
-	paintitem(m, menu, textr, off, lasti, 1, save, nil);
-	for(readmouse(mc); mc->buttons & (1<<(but-1)); readmouse(mc)){
-		i = menusel(textr, mc->xy);
-		if(i != -1 && i == lasti)
-			continue;
-		paintitem(m, menu, textr, off, lasti, 0, nil, save);
-		if(i == -1)
-			return i;
-		lasti = i;
-		paintitem(m, menu, textr, off, lasti, 1, save, nil);
-	}
-	return lasti;
-}
-
 static void
 menupaint(Image *m, Menu *menu, Rectangle textr, int off, int nitemdrawn)
 {

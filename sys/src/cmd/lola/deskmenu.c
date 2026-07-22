@@ -19,12 +19,11 @@ static
 void
 menucolors(void)
 {
-	/* Main tone is greenish, with negative selection */
-	back = getcolor("menuback", 0xEAFFEAFF);
-	high = getcolor("menuhigh", 0x448844FF);	/* dark green */
-	bord = getcolor("menubord", 0x88CC88FF);	/* not as dark green */
+	back = getcolor("menuback", 0xC0C0C0FF);
+	high = getcolor("menuhigh", 0x000080FF);
+	bord = getcolor("menubord", 0x000000FF);
 	text = getcolor("menutext", 0x000000FF);
-	htext = getcolor("menuhtext", 0xEAFFEAFF);
+	htext = getcolor("menuhtext", 0xFFFFFFFF);
 	if(back==nil || high==nil || bord==nil || text==nil || htext==nil)
 		goto Error;
 	return;
@@ -72,28 +71,6 @@ menusel(Rectangle r, Point p)
 }
 
 
-static Point
-menuscan(Image *m, int but, Mousectl *mc, Rectangle contr)
-{
-	Point ij, lastij;
-
-	lastij = menusel(contr, mc->xy);
-	paintitem(m, contr, lastij.x, lastij.y, 1);
-	readmouse(mc);
-	while(mc->buttons & (1<<(but-1))){
-		ij = menusel(contr, mc->xy);
-		if(!eqpt(ij, lastij))
-			paintitem(m, contr, lastij.x, lastij.y, 0);
-		if(ij.x == -1 || ij.y == -1)
-			return Pt(-1,-1);
-		lastij = ij;
-		paintitem(m, contr, lastij.x, lastij.y, 1);
-
-		readmouse(mc);
-	}
-	return lastij;
-}
-
 static void
 menupaint(Image *m, Rectangle contr, int nx, int ny)
 {
@@ -127,7 +104,8 @@ dmenuhit(int but, Mousectl *mc, int nx, int ny, Point last)
 {
 	Rectangle r, menur, contr;
 	Point delta;
-	Point sel;
+	Point hover, sel;
+	int butmask;
 
 	if(back == nil)
 		menucolors();
@@ -154,9 +132,29 @@ dmenuhit(int but, Mousectl *mc, int nx, int ny, Point last)
 	border(b, menur, Border, bord, ZP);
 	menupaint(b, contr, nx, ny);
 
+	butmask = 1<<(but-1);
 	sel = Pt(-1, -1);
-	while(mc->buttons & (1<<(but-1))){
-		sel = menuscan(b, but, mc, contr);
+	hover = Pt(-1, -1);
+	while(mc->buttons & butmask)
+		readmouse(mc);
+	for(;;){
+		Point ij;
+
+		ij = menusel(contr, mc->xy);
+		if(!eqpt(ij, hover)){
+			paintitem(b, contr, hover.x, hover.y, 0);
+			hover = ij;
+			paintitem(b, contr, hover.x, hover.y, 1);
+			flushimage(display, 1);
+		}
+		readmouse(mc);
+		if(mc->buttons & 7){
+			if(hover.x >= 0 && hover.y >= 0)
+				sel = hover;
+			while(mc->buttons & 7)
+				readmouse(mc);
+			break;
+		}
 	}
 
 	if(backup){
