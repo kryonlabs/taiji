@@ -1288,10 +1288,6 @@ threadmain(int argc, char *argv[])
 	gotscreen = access("/dev/screen", AEXIST)==0;
 
 	initdata();
-	/* hack to get menu colors referenced,
-	 * so setting them with initstr will work */
-	btn12menu();
-
 	wscreen = allocscreen(screen, background, 0);
 	fakebg = allocwindow(wscreen, screen->r, Refbackup, DNofill);
 	draw(fakebg, fakebg->r, background, nil, ZP);
