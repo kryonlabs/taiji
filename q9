@@ -14,6 +14,8 @@ monitorsock=$root/$state/monitor.sock
 sessionstate=$root/$state/session.vmstate
 sessiontmp=$root/$state/session.vmstate.tmp
 sessionlock=$root/$state/session.lock
+sessionmeta=$root/$state/session.kind
+runlock=$root/$state/run.lock
 buildlog=$state/build.log
 qemulog=$state/qemu.log
 socatlog=$state/socat.log
@@ -30,8 +32,6 @@ boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
 autosave=${Q9_AUTOSAVE:-1}
-autosavedelay=${Q9_AUTOSAVE_DELAY:-30}
-autosaveinterval=${Q9_AUTOSAVE_INTERVAL:-30}
 fresh=false
 hadsession=false
 
@@ -46,12 +46,11 @@ usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [conso
 
 Default mode boots Glenda's normal graphical Plan 9 profile.
 Default graphical mode resumes boot/q9/session.vmstate when present and
-autosaves that session while it runs, and again on shutdown or Ctrl-C.
+saves only a clean pre-lola boot checkpoint, not open windows.
 
 Use --text, tty, or shell to boot a clean rc console on QEMU serial stdio.
 Use --fresh to ignore the saved graphical session for this run.
-Use --no-autosave or Q9_AUTOSAVE=0 to disable session save/resume.
-Q9_AUTOSAVE_DELAY and Q9_AUTOSAVE_INTERVAL tune periodic GUI saves.
+Use --no-autosave or Q9_AUTOSAVE=0 to disable checkpoint save/resume.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
@@ -188,6 +187,8 @@ cleanup_runtime()
 {
 	rm -f "$serialsock" "$monitorsock"
 	rmdir "$sessionlock" 2>/dev/null || true
+	rm -f "$runlock/pid" 2>/dev/null || true
+	rmdir "$runlock" 2>/dev/null || true
 }
 
 qemu_autosave()
@@ -198,6 +199,37 @@ qemu_autosave()
 	[ "$raw" != true ] || return 1
 	[ "$textonly" != true ] || return 1
 	return 0
+}
+
+has_checkpoint()
+{
+	[ -s "$sessionstate" ] || return 1
+	[ -r "$sessionmeta" ] || return 1
+	grep -q '^pre-lola$' "$sessionmeta"
+}
+
+acquire_runlock()
+{
+	pid=
+	if mkdir "$runlock" 2>/dev/null; then
+		printf '%s\n' "$$" >"$runlock/pid"
+		return 0
+	fi
+	if [ -r "$runlock/pid" ]; then
+		pid=$(cat "$runlock/pid" 2>/dev/null || true)
+	fi
+	if [ "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+		echo "q9: graphical session already running as pid $pid" >&2
+		exit 1
+	fi
+	rm -f "$runlock/pid" 2>/dev/null || true
+	rmdir "$runlock" 2>/dev/null || true
+	if mkdir "$runlock" 2>/dev/null; then
+		printf '%s\n' "$$" >"$runlock/pid"
+		return 0
+	fi
+	echo "q9: could not acquire run lock: $runlock" >&2
+	exit 1
 }
 
 wait_for_socket()
@@ -233,6 +265,26 @@ hmp()
 	printf '%s\n' "$1" | socat - "UNIX-CONNECT:$monitorsock" 2>>"$monitorlog"
 }
 
+wait_for_incoming()
+{
+	i=0
+	while [ "$i" -lt 60 ]; do
+		out=$(hmp 'info migrate' || true)
+		printf '%s\n' "$out" >>"$monitorlog"
+		if printf '%s\n' "$out" | grep -qi 'completed'; then
+			return 0
+		fi
+		if printf '%s\n' "$out" | grep -Eqi 'failed|cancelled|error'; then
+			echo 'q9: saved checkpoint restore failed' >&2
+			return 1
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo 'q9: timed out restoring saved checkpoint' >&2
+	return 1
+}
+
 save_session()
 {
 	i=0
@@ -259,6 +311,7 @@ save_session()
 		if hmp 'info migrate' | grep -qi 'completed'; then
 			if [ -s "$sessiontmp" ]; then
 				mv "$sessiontmp" "$sessionstate"
+				printf 'pre-lola\n' >"$sessionmeta"
 				echo "q9: saved session: $sessionstate" >&2
 			fi
 			if [ "$action" = continue ]; then
@@ -280,38 +333,13 @@ save_session()
 	rmdir "$sessionlock" 2>/dev/null || true
 }
 
-watch_autosave()
-{
-	wait_for_monitor || return 0
-	i=0
-	while kill -0 "$qemupid" 2>/dev/null; do
-		if hmp 'info status' | grep -qi 'status: paused'; then
-			save_session
-			return 0
-		fi
-		if [ "$i" -ge "$autosavedelay" ]; then
-			save_session continue
-			i=0
-			while [ "$i" -lt "$autosaveinterval" ] && kill -0 "$qemupid" 2>/dev/null; do
-				sleep 1
-				i=$((i + 1))
-			done
-			i=$autosavedelay
-		else
-			sleep 1
-			i=$((i + 1))
-		fi
-	done
-	return 0
-}
-
 qemu_common()
 {
 	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
 	tftp="tftp=$root"
 	if qemu_autosave; then
-		if [ "$fresh" != true ] && [ -s "$sessionstate" ]; then
-			echo "q9: resuming saved GUI session: $sessionstate" >&2
+		if [ "$fresh" != true ] && has_checkpoint; then
+			echo "q9: resuming pre-lola checkpoint: $sessionstate" >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
 				-device "virtio-net-pci,netdev=net0,mac=$mac" \
@@ -321,7 +349,7 @@ qemu_common()
 				-action shutdown=pause -no-shutdown \
 				-incoming "exec:cat $sessionstate" "$@"
 		else
-			echo 'q9: no saved GUI session; cold booting' >&2
+			echo 'q9: no pre-lola checkpoint; cold booting' >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
 				-device "virtio-net-pci,netdev=net0,mac=$mac" \
@@ -388,10 +416,14 @@ run_clean()
 		echo 'q9: clean console needs a terminal; use --raw for non-interactive output' >&2
 		exit 1
 	fi
+	if qemu_autosave; then
+		acquire_runlock
+		trap 'cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+	fi
 	build_u9fs
 	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"
 	hadsession=false
-	if qemu_autosave && [ "$fresh" != true ] && [ -s "$sessionstate" ]; then
+	if qemu_autosave && [ "$fresh" != true ] && has_checkpoint; then
 		hadsession=true
 	fi
 	if [ "$textonly" = true ]; then
@@ -418,15 +450,23 @@ run_clean()
 	socat -u "UNIX-CONNECT:$serialsock" "OPEN:$seriallog,creat,append" 2>"$socatlog" &
 	logpid=$!
 	if qemu_autosave; then
-		if [ "$fresh" != true ] && [ -s "$sessionstate" ]; then
-			wait_for_monitor && hmp 'cont' >/dev/null 2>&1 || true
+		if [ "$fresh" != true ] && has_checkpoint; then
+			if wait_for_monitor && wait_for_incoming; then
+				hmp 'cont' >/dev/null 2>&1 || true
+			else
+				echo 'q9: ignoring unusable checkpoint; run ./q9 again for a cold boot' >&2
+				mv "$sessionmeta" "$sessionmeta.bad" 2>/dev/null || true
+				kill -TERM "$qemupid" 2>/dev/null || true
+				wait "$qemupid" 2>/dev/null || true
+				cleanup_runtime
+				clear_runrc
+				exit 1
+			fi
 		fi
-		watch_autosave &
-		watchpid=$!
 	else
-		watchpid=
+		:
 	fi
-	trap 'if qemu_autosave; then save_session; fi; kill -TERM "${watchpid:-}" "${logpid:-}" "$qemupid" 2>/dev/null || true; wait "${watchpid:-}" "${logpid:-}" 2>/dev/null || true; wait "$qemupid" 2>/dev/null || true; cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+	trap 'kill -TERM "${logpid:-}" "$qemupid" 2>/dev/null || true; wait "${logpid:-}" 2>/dev/null || true; wait "$qemupid" 2>/dev/null || true; cleanup_runtime; clear_runrc' EXIT HUP INT TERM
 	wait_for_prompt
 	if qemu_autosave && [ "$hadsession" != true ]; then
 		save_session continue

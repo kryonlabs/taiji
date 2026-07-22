@@ -20,5 +20,8 @@ boot/q9/serial.sock
 boot/q9/session.vmstate
 boot/q9/session.vmstate.tmp
 boot/q9/session.lock
+boot/q9/session.kind
+boot/q9/session.kind.bad
+boot/q9/run.lock
 cfg/q9/run.rc
 cfg/q9/run.rc.*
