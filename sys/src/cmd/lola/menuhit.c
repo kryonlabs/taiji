@@ -29,12 +29,11 @@ static
 void
 menucolors(void)
 {
-	/* Main tone is greenish, with negative selection */
-	back = getcolor("menuback", 0xEAFFEAFF);
-	high = getcolor("menuhigh", 0x448844FF);	/* dark green */
-	bord = getcolor("menubord", 0x88CC88FF);	/* not as dark green */
+	back = getcolor("menuback", 0xC0C0C0FF);
+	high = getcolor("menuhigh", 0x000080FF);
+	bord = getcolor("menubord", 0x000000FF);
 	text = getcolor("menutext", 0x000000FF);
-	htext = getcolor("menuhtext", 0xEAFFEAFF);
+	htext = getcolor("menuhtext", 0xFFFFFFFF);
 	if(back==nil || high==nil || bord==nil || text==nil || htext==nil)
 		goto Error;
 	return;
@@ -159,6 +158,7 @@ int
 menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 {
 	int i, nitem, nitemdrawn, maxwid, lasti, off, noff, wid, screenitem;
+	int butmask, selected;
 	int scrolling;
 	Rectangle r, menur, sc, textr, scrollr;
 	Image *b, *save, *backup;
@@ -242,25 +242,79 @@ menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 	menupaint(b, menu, textr, off, nitemdrawn);
 	if(scrolling)
 		menuscrollpaint(b, scrollr, off, nitem, nitemdrawn);
-	while(mc->buttons & (1<<(but-1))){
-		lasti = menuscan(b, menu, but, mc, textr, off, lasti, save);
-		if(lasti >= 0)
-			break;
-		while(!ptinrect(mc->xy, textr) && (mc->buttons & (1<<(but-1)))){
-			if(scrolling && ptinrect(mc->xy, scrollr)){
-				noff = ((mc->xy.y-scrollr.min.y)*nitem)/Dy(scrollr);
-				noff -= nitemdrawn/2;
-				if(noff < 0)
-					noff = 0;
-				if(noff > nitem-nitemdrawn)
-					noff = nitem-nitemdrawn;
-				if(noff != off){
-					off = noff;
-					menupaint(b, menu, textr, off, nitemdrawn);
-					menuscrollpaint(b, scrollr, off, nitem, nitemdrawn);
-				}
+
+	butmask = 1<<(but-1);
+	while(mc->buttons & butmask)
+		readmouse(mc);
+	lasti = -1;
+	selected = -1;
+	for(;;){
+		i = menusel(textr, mc->xy);
+		if(i >= nitemdrawn)
+			i = -1;
+		if(i != lasti){
+			if(lasti >= 0)
+				paintitem(b, menu, textr, off, lasti, 0, nil, nil);
+			if(i >= 0)
+				paintitem(b, menu, textr, off, i, 1, save, nil);
+			lasti = i;
+			flushimage(display, 1);
+		}
+		readmouse(mc);
+		if(mc->buttons & 8){
+			if(scrolling && off > 0){
+				if(lasti >= 0)
+					paintitem(b, menu, textr, off, lasti, 0, nil, nil);
+				off--;
+				lasti = -1;
+				menupaint(b, menu, textr, off, nitemdrawn);
+				menuscrollpaint(b, scrollr, off, nitem, nitemdrawn);
+				flushimage(display, 1);
 			}
-			readmouse(mc);
+			while(mc->buttons & 8)
+				readmouse(mc);
+			continue;
+		}
+		if(mc->buttons & 16){
+			if(scrolling && off < nitem-nitemdrawn){
+				if(lasti >= 0)
+					paintitem(b, menu, textr, off, lasti, 0, nil, nil);
+				off++;
+				lasti = -1;
+				menupaint(b, menu, textr, off, nitemdrawn);
+				menuscrollpaint(b, scrollr, off, nitem, nitemdrawn);
+				flushimage(display, 1);
+			}
+			while(mc->buttons & 16)
+				readmouse(mc);
+			continue;
+		}
+		if(mc->buttons & 7){
+			if(lasti >= 0)
+				selected = lasti+off;
+			while(mc->buttons & 7)
+				readmouse(mc);
+			break;
+		}
+		if(scrolling && ptinrect(mc->xy, scrollr)){
+			noff = ((mc->xy.y-scrollr.min.y)*nitem)/Dy(scrollr);
+			noff -= nitemdrawn/2;
+			if(noff < 0)
+				noff = 0;
+			if(noff > nitem-nitemdrawn)
+				noff = nitem-nitemdrawn;
+			if(noff != off){
+				if(lasti >= 0)
+					paintitem(b, menu, textr, off, lasti, 0, nil, nil);
+				off = noff;
+				lasti = -1;
+				menupaint(b, menu, textr, off, nitemdrawn);
+				menuscrollpaint(b, scrollr, off, nitem, nitemdrawn);
+				flushimage(display, 1);
+			}
+		}else if(!ptinrect(mc->xy, menur) && (mc->buttons & 7) == 0){
+			/* keep the menu open while moving nearby; click outside cancels */
+			continue;
 		}
 	}
 	if(b != screen)
@@ -272,8 +326,8 @@ menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 	freeimage(save);
 	replclipr(screen, 0, sc);
 	flushimage(display, 1);
-	if(lasti >= 0){
-		menu->lasthit = lasti+off;
+	if(selected >= 0){
+		menu->lasthit = selected;
 		return menu->lasthit;
 	}
 	return -1;
