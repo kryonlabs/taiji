@@ -1,0 +1,4 @@
+#!/bin/rc
+cd /sys/src/cmd/rio
+rm -f main.8 panel.8 menuhit.8 8.out /386/bin/rio
+mk install

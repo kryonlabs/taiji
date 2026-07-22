@@ -2,6 +2,8 @@
 [68].*
 *.a[68]
 *.o
+sys/src/cmd/rio/*.8
+sys/src/cmd/rio/8.out
 usr/glenda/tmp
 usr/glenda/acme.dump
 usr/glenda/lib/go.rc

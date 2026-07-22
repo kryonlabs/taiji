@@ -6,10 +6,11 @@
 
 enum
 {
-	Margin = 4,		/* outside to text */
+	Margin = 3,		/* outside to text */
 	Border = 2,		/* outside to selection boxes */
-	Blackborder = 2,	/* width of outlining border */
-	Vspacing = 2,		/* extra spacing between lines of text */
+	Blackborder = 1,	/* width of outlining border */
+	Itemh = 20,
+	Textpad = 22,
 	Maxunscroll = 25,	/* maximum #entries before scrolling turns on */
 	Nscroll = 20,		/* number entries in scrolling part */
 	Scrollwid = 14,		/* width of scroll bar */
@@ -29,11 +30,11 @@ static
 void
 menucolors(void)
 {
-	back = getcolor("menuback", 0xC0C0C0FF);
-	high = getcolor("menuhigh", 0x000080FF);
-	bord = getcolor("menubord", 0x000000FF);
-	text = getcolor("menutext", 0x000000FF);
-	htext = getcolor("menuhtext", 0xFFFFFFFF);
+	back = getcolor(nil, 0xC0C0C0FF);
+	high = getcolor(nil, 0x000080FF);
+	bord = getcolor(nil, 0x000000FF);
+	text = getcolor(nil, 0x000000FF);
+	htext = getcolor(nil, 0xFFFFFFFF);
 	if(back==nil || high==nil || bord==nil || text==nil || htext==nil)
 		goto Error;
 	return;
@@ -60,8 +61,8 @@ menurect(Rectangle r, int i)
 {
 	if(i < 0)
 		return Rect(0, 0, 0, 0);
-	r.min.y += (font->height+Vspacing)*i;
-	r.max.y = r.min.y+font->height+Vspacing;
+	r.min.y += Itemh*i;
+	r.max.y = r.min.y+Itemh;
 	return insetrect(r, Border-Margin);
 }
 
@@ -74,7 +75,7 @@ menusel(Rectangle r, Point p)
 {
 	if(!ptinrect(p, r))
 		return -1;
-	return (p.y-r.min.y)/(font->height+Vspacing);
+	return (p.y-r.min.y)/Itemh;
 }
 
 static void
@@ -94,10 +95,10 @@ paintitem(Image *m, Menu *menu, Rectangle textr, int off, int i, int highlight, 
 	if(save)
 		draw(save, save->r, m, nil, r.min);
 	item = menu->item? menu->item[i+off] : (*menu->gen)(i+off);
-	pt.x = (textr.min.x+textr.max.x-stringwidth(font, item))/2;
-	pt.y = textr.min.y+i*(font->height+Vspacing);
-	draw(m, r, highlight? high : back, nil, pt);
-	string(m, pt, highlight? htext : text, pt, font, item);
+	pt.x = textr.min.x+Textpad;
+	pt.y = r.min.y+(Dy(r)-font->height)/2;
+	draw(m, r, highlight? high : back, nil, ZP);
+	string(m, pt, highlight? htext : text, ZP, font, item);
 }
 
 static void
@@ -124,7 +125,7 @@ menuscrollpaint(Image *m, Rectangle scrollr, int off, int nitem, int nitemdrawn)
 		r.max.y = r.min.y+2;
 	border(m, r, 1, bord, ZP);
 	if(menutxt == 0)
-		menutxt = allocimage(display, Rect(0, 0, 1, 1), screen->chan, 1, DDarkgreen);	/* border color; BUG? */
+		menutxt = allocimage(display, Rect(0, 0, 1, 1), screen->chan, 1, 0x808080FF);
 	if(menutxt)
 		draw(m, insetrect(r, 1), menutxt, nil, ZP);
 }
@@ -154,13 +155,13 @@ menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 	}
 	if(menu->lasthit<0 || menu->lasthit>=nitem)
 		menu->lasthit = 0;
-	screenitem = (Dy(screen->r)-10)/(font->height+Vspacing);
+	screenitem = (Dy(screen->r)-10)/Itemh;
 	if(nitem>Maxunscroll || nitem>screenitem){
 		scrolling = 1;
 		nitemdrawn = Nscroll;
 		if(nitemdrawn > screenitem)
 			nitemdrawn = screenitem;
-		wid = maxwid + Gap + Scrollwid;
+		wid = maxwid + Textpad + 10 + Gap + Scrollwid;
 		off = menu->lasthit - nitemdrawn/2;
 		if(off < 0)
 			off = 0;
@@ -170,12 +171,12 @@ menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 	}else{
 		scrolling = 0;
 		nitemdrawn = nitem;
-		wid = maxwid;
+		wid = maxwid + Textpad + 10;
 		off = 0;
 		lasti = menu->lasthit;
 	}
-	r = insetrect(Rect(0, 0, wid, nitemdrawn*(font->height+Vspacing)), -Margin);
-	r = rectsubpt(r, Pt(wid/2, lasti*(font->height+Vspacing)+font->height/2));
+	r = insetrect(Rect(0, 0, wid, nitemdrawn*Itemh), -Margin);
+	r = rectsubpt(r, Pt(wid/2, lasti*Itemh+Itemh/2));
 	r = rectaddpt(r, mc->xy);
 	pt = ZP;
 	if(r.max.x>screen->r.max.x)
@@ -187,15 +188,15 @@ menuhit(int but, Mousectl *mc, Menu *menu, Screen *scr)
 	if(r.min.y<screen->r.min.y)
 		pt.y = screen->r.min.y-r.min.y;
 	menur = rectaddpt(r, pt);
-	textr.max.x = menur.max.x-Margin;
-	textr.min.x = textr.max.x-maxwid;
-	textr.min.y = menur.min.y+Margin;
-	textr.max.y = textr.min.y + nitemdrawn*(font->height+Vspacing);
 	if(scrolling){
 		scrollr = insetrect(menur, Border);
 		scrollr.max.x = scrollr.min.x+Scrollwid;
 	}else
 		scrollr = Rect(0, 0, 0, 0);
+	textr = insetrect(menur, Margin);
+	if(scrolling)
+		textr.min.x = scrollr.max.x+Gap;
+	textr.max.y = textr.min.y + nitemdrawn*Itemh;
 
 	if(scr){
 		b = allocwindow(scr, menur, Refbackup, DWhite);

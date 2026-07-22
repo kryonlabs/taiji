@@ -5,7 +5,7 @@ bool scrolling;
 bool notitle;
 bool unixkeys;
 int ndeskx = 3;
-int ndesky = 3;
+int ndesky = 2;
 
 RKeyboardctl *kbctl;
 Mousectl *mctl;
@@ -827,16 +827,6 @@ btn13menu(void)
 void
 btn12menu(void)
 {
-	int dx, dy, i, j;
-
-	dx = Dx(screen->r);
-	dy = Dy(screen->r);
-	i = screenoff.x/dx;
-	j = screenoff.y/dy;
-	Point ssel = dmenuhit(2, mctl, ndeskx, ndesky, Pt(i,j));
-	if(ssel.x >= 0 && ssel.y >= 0 && 
-	   (ssel.x*dx != screenoff.x || ssel.y*dy != screenoff.y))
-		screenoffset(ssel.x*dx, ssel.y*dy);
 }
 
 static void

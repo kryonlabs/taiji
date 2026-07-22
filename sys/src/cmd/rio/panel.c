@@ -6,6 +6,7 @@ enum {
 	PanelHeight = 28,
 	StartWidth = 86,
 	TrayWidth = 96,
+	DeskWidth = 56,
 	QuickWidth = 58,
 	MenuWidth = 176,
 	MenuItemHeight = 24,
@@ -61,6 +62,7 @@ static Image *submenubackup;
 static Rectangle menur;
 static Rectangle submenur;
 static Rectangle clockr;
+static Rectangle deskr;
 static int menuopen;
 static int submenuopen;
 static int menuhover = -1;
@@ -159,11 +161,57 @@ taskrect(int i)
 	int x, maxx, w;
 
 	x = panelr.min.x + StartWidth + QuickWidth + 8;
-	maxx = panelr.max.x - TrayWidth - 8;
+	maxx = panelr.max.x - TrayWidth - DeskWidth - 8;
 	w = 130;
 	if(nwindows > 0)
 		w = MIN(150, MAX(70, (maxx-x)/nwindows));
 	return Rect(x+i*w, panelr.min.y+4, MIN(x+(i+1)*w-3, maxx), panelr.max.y-4);
+}
+
+static Rectangle
+deskitemrect(int i)
+{
+	Rectangle r;
+	int col, row, w, h;
+
+	col = i%ndeskx;
+	row = i/ndeskx;
+	r = insetrect(deskr, 1);
+	w = Dx(r)/ndeskx;
+	h = Dy(r)/ndesky;
+	return Rect(r.min.x+col*w, r.min.y+row*h,
+		r.min.x+(col+1)*w-1, r.min.y+(row+1)*h-1);
+}
+
+static int
+deskitemat(Point p)
+{
+	int i;
+
+	if(!ptinrect(p, deskr))
+		return -1;
+	for(i = 0; i < ndeskx*ndesky; i++)
+		if(ptinrect(p, deskitemrect(i)))
+			return i;
+	return -1;
+}
+
+static void
+deskdraw(void)
+{
+	Rectangle r;
+	int i, cur;
+
+	if(Dx(screen->r) <= 0 || Dy(screen->r) <= 0)
+		return;
+	cur = screenoff.x/Dx(screen->r) + ndeskx*(screenoff.y/Dy(screen->r));
+	winborder(screen, deskr, shadow, hilite);
+	draw(screen, insetrect(deskr, 1), face, nil, ZP);
+	for(i = 0; i < ndeskx*ndesky; i++){
+		r = deskitemrect(i);
+		draw(screen, r, i == cur ? active : shadow, nil, ZP);
+		border(screen, r, 1, darkshadow, ZP);
+	}
 }
 
 static void
@@ -256,6 +304,8 @@ paneldraw(void)
 	}
 
 	clockr = Rect(panelr.max.x-TrayWidth+4, panelr.min.y+4, panelr.max.x-4, panelr.max.y-4);
+	deskr = Rect(clockr.min.x-DeskWidth, panelr.min.y+2, clockr.min.x-4, panelr.max.y-2);
+	deskdraw();
 	winborder(screen, clockr, shadow, hilite);
 	draw(screen, insetrect(clockr, 1), face, nil, ZP);
 	tm = localtime(time(0));
@@ -534,6 +584,13 @@ panelmouse(Mousectl *mc)
 		}
 		if(ptinrect(mc->xy, clockr)){
 			launch("clock");
+			drainmouse(mc, nil);
+			paneldraw();
+			return 1;
+		}
+		i = deskitemat(mc->xy);
+		if(i >= 0){
+			screenoffset((i%ndeskx)*Dx(screen->r), (i/ndeskx)*Dy(screen->r));
 			drainmouse(mc, nil);
 			paneldraw();
 			return 1;
