@@ -144,7 +144,6 @@ $cputype
 		rc
 		read
 		lola
-		rio
 		rm
 		rx
 		sam
@@ -342,7 +341,7 @@ usr
 		bin
 			$cputype
 			rc
-				riostart
+				lolastart
 				screensize
 		lib
 			acme.dump
@@ -353,5 +352,4 @@ usr
 			plumbing
 		readme.acme
 		readme.lola
-		readme.rio
 		tmp

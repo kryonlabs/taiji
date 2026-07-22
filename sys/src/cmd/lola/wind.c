@@ -780,7 +780,7 @@ wsethold(WinTab *w, int hold)
 void
 wmovemouse(Window *w, Point pt, bool force)
 {
-	// TODO? rio also checks menuing and such
+	// TODO? also check menuing and such
 	if(force ||
 	   w == focused && wpointto(mctl->xy) == w && ptinrect(pt, w->rect))
 		moveto(mctl, pt);

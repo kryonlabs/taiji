@@ -10,14 +10,10 @@ switch($wm){
 case lola
 	if(test -x /bin/lola)
 		startlola $*
-	if not if(test -x /bin/rio)
-		startrio $*
 	if not {
-		echo 'startwm: neither /bin/lola nor /bin/rio was found' >[1=2]
+		echo 'startwm: /bin/lola not found' >[1=2]
 		exit notfound
 	}
-case rio
-	startrio $*
 case acme
 	if(! test -x /bin/acme){
 		echo 'startwm: /bin/acme not found' >[1=2]
@@ -25,6 +21,6 @@ case acme
 	}
 	acme $*
 case *
-	echo 'usage: startwm [lola|rio|acme] [args...]' >[1=2]
+	echo 'usage: startwm [lola|acme] [args...]' >[1=2]
 	exit usage
 }

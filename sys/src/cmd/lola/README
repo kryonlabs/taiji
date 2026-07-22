@@ -1,11 +1,6 @@
 # lola
 
-Lola is the attempt at a new window system. Its architecture is based
-on that of rio, and it borrows some of its code, but it is not a
-modified rio.
-
-The first milestone was to reach something like feature parity with rio.
-The goals were:
+Lola is the default window system in this tree. Its goals are:
 
 - use lib9p instead of implementing the 9p server from scratch
 	-> 9p no longer in separate proc, easier synchronization

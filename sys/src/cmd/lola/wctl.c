@@ -321,7 +321,7 @@ wctlcmd(WinTab *w, Rectangle r, int cmd)
 		if(!eqrect(r, ww->frame->r))
 			wresize(ww, r);
 		break;
-// TODO: these three work somewhat differently in rio
+// TODO: these three need clearer semantics
 	case Top:
 		wraise(ww);
 		break;

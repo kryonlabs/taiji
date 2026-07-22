@@ -1,12 +1,10 @@
 Lola is the default window system in this tree.
 
-It is compatible with the usual rio startup tools, so the window
-command still creates new shell or program windows.  Lola also adds
+The window command creates new shell or program windows. Lola also adds
 title bars, window decoration styles, virtual desktops, window picking,
 and experimental tabbed windows.
 
-The mouse menus are mostly rio-like.  Button 3 on the desktop opens
-the window menu; a 1-2 chord on the desktop opens the screen menu for
+Button 3 on the desktop opens the window menu. A 1-2 chord opens the screen menu for
 virtual desktops.
 
 For more information, try the lola(1) manual page.

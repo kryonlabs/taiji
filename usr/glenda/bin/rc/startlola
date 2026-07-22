@@ -6,6 +6,6 @@ if(! test -x /bin/lola){
 }
 
 if(grep -s -e -theme /bin/lola)
-	lola -theme win2k -i riostart $*
+	lola -theme win2k -i lolastart $*
 if not
-	lola -i riostart $*
+	lola -i lolastart $*

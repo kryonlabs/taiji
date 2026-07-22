@@ -97,7 +97,6 @@ if(test -f /dev/mousectl){
 			aux/vga -l $vgasize
 			echo -n ctlpoff > /dev/consctl
 			font=/lib/font/bit/pelm/euro.9.font
-			#rio -s
 		}
 	}
 }

@@ -44,7 +44,7 @@ case terminal
 	if(test -r /cfg/q9/prelola.rc)
 		. /cfg/q9/prelola.rc
 	echo q9: gui ready
-	exec lola -theme win2k -i riostart
+	exec lola -theme win2k -i lolastart
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev

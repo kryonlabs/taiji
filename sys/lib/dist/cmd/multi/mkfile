@@ -45,7 +45,6 @@ PIECES=\
 	mv\
 	ps\
 	read\
-#	rio\
 	rm\
 	sed\
 	sort\

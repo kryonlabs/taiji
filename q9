@@ -44,7 +44,7 @@ usage()
 usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
        ./q9 [--text] [--mini] [--raw] [--smp n] run command
        ./q9 [--mini] [--raw] [--smp n] tty-run command
-       ./q9 [--mini] [--raw] [--smp n] acme|rio|lola [args...]
+       ./q9 [--mini] [--raw] [--smp n] acme|lola [args...]
 
 Default mode boots Glenda's normal graphical Plan 9 profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
@@ -143,7 +143,7 @@ tty-run)
 	mac=$textmac
 	textonly=true
 	;;
-acme|rio|lola)
+acme|lola)
 	set -- "$mode" "$@"
 	mode=run
 	profile=false

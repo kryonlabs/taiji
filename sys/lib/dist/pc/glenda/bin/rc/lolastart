@@ -1,0 +1,2 @@
+#!/bin/rc
+window -r 40 70 760 560 explorer /

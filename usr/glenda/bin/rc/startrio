@@ -1,8 +1,0 @@
-#!/bin/rc
-
-if(! test -x /bin/rio){
-	echo 'startrio: /bin/rio not found' >[1=2]
-	exit notfound
-}
-
-rio $*

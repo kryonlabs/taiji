@@ -1,6 +1,6 @@
 #include "inc.h"
 
-/* taken from rio */
+/* window-system time helpers */
 
 static Channel*	ctimer;	/* chan(Timer*)[100] */
 static Timer *timer;

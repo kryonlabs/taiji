@@ -497,7 +497,6 @@ $cputype	d775 sys sys
 		ramfs-lib9p	775 sys sys
 		rc		775 sys sys
 		read		775 sys sys
-		rio		775 sys sys
 		rm		775 sys sys
 		rx		775 sys sys
 		sam		775 sys sys
