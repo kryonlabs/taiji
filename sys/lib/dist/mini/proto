@@ -143,7 +143,7 @@ $cputype
 		ramfs
 		rc
 		read
-		lola
+		rio
 		rm
 		rx
 		sam
@@ -341,7 +341,7 @@ usr
 		bin
 			$cputype
 			rc
-				lolastart
+				riostart
 				screensize
 		lib
 			acme.dump
@@ -351,5 +351,5 @@ usr
 			profile
 			plumbing
 		readme.acme
-		readme.lola
+		readme.rio
 		tmp

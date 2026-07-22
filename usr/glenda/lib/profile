@@ -41,10 +41,10 @@ case terminal
 			. /cfg/q9/run.rc
 		exec rc
 	}
-	if(test -r /cfg/q9/prelola.rc)
-		. /cfg/q9/prelola.rc
+	if(test -r /cfg/q9/prerio.rc)
+		. /cfg/q9/prerio.rc
 	echo q9: gui ready
-	exec lola -theme win2k -i lolastart
+	exec rio -theme win2k -i riostart
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev
@@ -59,7 +59,7 @@ case cpu
 	news
 	if (! test -e /mnt/term/mnt/wsys) {	# cpu call from drawterm
 		font=/lib/font/bit/pelm/latin1.8.font
-		exec lola -theme win2k
+		exec rio -theme win2k
 	}
 case con
 	prompt=('cpu% ' '	')

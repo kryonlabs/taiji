@@ -1,6 +1,6 @@
-# lola
+# rio
 
-Lola is the default window system in this tree. Its goals are:
+Rio is the default window system in this tree. Its goals are:
 
 - use lib9p instead of implementing the 9p server from scratch
 	-> 9p no longer in separate proc, easier synchronization
@@ -40,11 +40,11 @@ After that had been more or less achieved some new features were implemented:
 
 The window decoration theme is selected at startup:
 
-	lola -theme win95
+	rio -theme win95
 
 The short option is also supported:
 
-	lola -T win95
+	rio -T win95
 
 The options are: flat, simple, win3, win95.
 

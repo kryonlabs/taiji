@@ -1,17 +1,17 @@
 #!/bin/rc
 
-wm=lola
+wm=rio
 if(! ~ $#* 0){
 	wm=$1
 	shift
 }
 
 switch($wm){
-case lola
-	if(test -x /bin/lola)
-		startlola $*
+case rio
+	if(test -x /bin/rio)
+		startrio $*
 	if not {
-		echo 'startwm: /bin/lola not found' >[1=2]
+		echo 'startwm: /bin/rio not found' >[1=2]
 		exit notfound
 	}
 case acme
@@ -21,6 +21,6 @@ case acme
 	}
 	acme $*
 case *
-	echo 'usage: startwm [lola|acme] [args...]' >[1=2]
+	echo 'usage: startwm [rio|acme] [args...]' >[1=2]
 	exit usage
 }

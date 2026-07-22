@@ -8,7 +8,7 @@ cd "$root"
 state=boot/q9
 rundir=cfg/q9
 runrc=$rundir/run.rc
-prelolarc=$rundir/prelola.rc
+preriorc=$rundir/prerio.rc
 seriallog=$state/serial.log
 serialsock=$root/$state/serial.sock
 monitorsock=$root/$state/monitor.sock
@@ -33,7 +33,7 @@ boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
 autosave=${Q9_CHECKPOINT:-0}
-buildlola=${Q9_BUILD_LOLA:-1}
+buildrio=${Q9_BUILD_RIO:-1}
 fresh=false
 hadsession=false
 
@@ -44,7 +44,7 @@ usage()
 usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
        ./q9 [--text] [--mini] [--raw] [--smp n] run command
        ./q9 [--mini] [--raw] [--smp n] tty-run command
-       ./q9 [--mini] [--raw] [--smp n] acme|lola [args...]
+       ./q9 [--mini] [--raw] [--smp n] acme|rio [args...]
 
 Default mode boots Glenda's normal graphical Plan 9 profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
@@ -52,8 +52,8 @@ disabled by default because restored u9fs mounts can hang demand-loaded binaries
 
 Use --text, tty, or shell to boot a clean rc console on QEMU serial stdio.
 Use --fresh to ignore an experimental checkpoint for this run.
-Set Q9_CHECKPOINT=1 to try experimental pre-lola checkpoint save/resume.
-Set Q9_BUILD_LOLA=0 to skip rebuilding lola before graphical launch.
+Set Q9_CHECKPOINT=1 to try experimental pre-rio checkpoint save/resume.
+Set Q9_BUILD_RIO=0 to skip rebuilding rio before graphical launch.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
@@ -143,7 +143,7 @@ tty-run)
 	mac=$textmac
 	textonly=true
 	;;
-acme|lola)
+acme|rio)
 	set -- "$mode" "$@"
 	mode=run
 	profile=false
@@ -187,18 +187,18 @@ write_runrc()
 
 clear_runrc()
 {
-	rm -f "$runrc" "$runrc".* "$prelolarc" "$prelolarc".*
+	rm -f "$runrc" "$runrc".* "$preriorc" "$preriorc".*
 }
 
-write_prelolarc()
+write_preriorc()
 {
-	tmp=$prelolarc.$$
-	if [ "$profile" = true ] && [ "$textonly" != true ] && [ "$buildlola" = 1 ]; then
+	tmp=$preriorc.$$
+	if [ "$profile" = true ] && [ "$textonly" != true ] && [ "$buildrio" = 1 ]; then
 		{
 			printf '#!/bin/rc\n'
-			printf 'echo q9: rebuilding lola\n'
-			printf 'cd /sys/src/cmd/lola\n'
-			printf 'rm -f main.8 panel.8 theme.8 8.out /386/bin/lola\n'
+			printf 'echo q9: rebuilding rio\n'
+			printf 'cd /sys/src/cmd/rio\n'
+			printf 'rm -f main.8 panel.8 theme.8 8.out /386/bin/rio\n'
 			printf 'mk install\n'
 		} >"$tmp"
 	else
@@ -206,7 +206,7 @@ write_prelolarc()
 			printf '#!/bin/rc\n'
 		} >"$tmp"
 	fi
-	mv "$tmp" "$prelolarc"
+	mv "$tmp" "$preriorc"
 }
 
 cleanup_runtime()
@@ -231,7 +231,7 @@ has_checkpoint()
 {
 	[ -s "$sessionstate" ] || return 1
 	[ -r "$sessionmeta" ] || return 1
-	grep -q '^pre-lola$' "$sessionmeta"
+	grep -q '^pre-rio$' "$sessionmeta"
 }
 
 acquire_runlock()
@@ -337,7 +337,7 @@ save_session()
 		if hmp 'info migrate' | grep -qi 'completed'; then
 			if [ -s "$sessiontmp" ]; then
 				mv "$sessiontmp" "$sessionstate"
-				printf 'pre-lola\n' >"$sessionmeta"
+				printf 'pre-rio\n' >"$sessionmeta"
 				echo "q9: saved session: $sessionstate" >&2
 			fi
 			if [ "$action" = continue ]; then
@@ -365,7 +365,7 @@ qemu_common()
 	tftp="tftp=$root"
 	if qemu_autosave; then
 		if [ "$fresh" != true ] && has_checkpoint; then
-			echo "q9: resuming pre-lola checkpoint: $sessionstate" >&2
+			echo "q9: resuming pre-rio checkpoint: $sessionstate" >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
 				-device "virtio-net-pci,netdev=net0,mac=$mac" \
@@ -375,7 +375,7 @@ qemu_common()
 				-action shutdown=pause -no-shutdown \
 				-incoming "exec:cat $sessionstate" "$@"
 		else
-			echo 'q9: no pre-lola checkpoint; cold booting' >&2
+			echo 'q9: no pre-rio checkpoint; cold booting' >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
 				-device "virtio-net-pci,netdev=net0,mac=$mac" \
@@ -447,7 +447,7 @@ run_clean()
 		trap 'cleanup_runtime; clear_runrc' EXIT HUP INT TERM
 	fi
 	if [ "$profile" = true ] && [ "$textonly" != true ]; then
-		write_prelolarc
+		write_preriorc
 	fi
 	build_u9fs
 	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"

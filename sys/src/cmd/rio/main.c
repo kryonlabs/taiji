@@ -46,7 +46,7 @@ notehandler(void*, char *msg)
 	for(i = 0; oknotes[i]; i++)
 		if(strncmp(oknotes[i], msg, strlen(oknotes[i])) == 0)
 			threadexitsall(msg);
-	fprint(2, "lola %d: abort: %s\n", getpid(), msg);
+	fprint(2, "rio %d: abort: %s\n", getpid(), msg);
 	abort();
 	return 0;
 }
@@ -693,7 +693,7 @@ btn2menu(WinTab *w)
 		xsnarf(x);
 		break;
 	case Plumb:
-		if(xplumb(x, "lola", w->dir, fsys.msize-1024)){
+		if(xplumb(x, "rio", w->dir, fsys.msize-1024)){
 			c = cursor;
 			setcursoroverride(&query, TRUE);
 			sleep(300);
@@ -1182,22 +1182,22 @@ initcmd(void *arg)
 	wsys = getenv("wsys");
 	fd = open(wsys, ORDWR);
 	if(fd < 0)
-		fprint(2, "lola: failed to open wsys: %r\n");
+		fprint(2, "rio: failed to open wsys: %r\n");
 	if(mount(fd, -1, "/mnt/wsys", MREPL, "none") < 0)
-		fprint(2, "lola: failed to mount wsys: %r\n");
+		fprint(2, "rio: failed to mount wsys: %r\n");
 	if(bind("/mnt/wsys", "/dev/", MBEFORE) < 0)
-		fprint(2, "lola: failed to bind wsys: %r\n");
+		fprint(2, "rio: failed to bind wsys: %r\n");
 	free(wsys);
 	close(fd);
 	procexecl(nil, "/bin/rc", "rc", "-c", cmd, nil);
-	fprint(2, "lola: exec failed: %r\n");
+	fprint(2, "rio: exec failed: %r\n");
 	exits("exec");
 }
 
 void
 usage(void)
 {
-	fprint(2, "usage: lola [-i initcmd] [-s] [-t] [-P edge] [-nopanel] [-T theme] [-theme theme]\n");
+	fprint(2, "usage: rio [-i initcmd] [-s] [-t] [-P edge] [-nopanel] [-T theme] [-theme theme]\n");
 	exits("usage");
 }
 
@@ -1270,7 +1270,7 @@ threadmain(int argc, char *argv[])
 		unixkeys = TRUE;
 	free(s);
 
-	if(initdraw(nil, nil, "lola") < 0)
+	if(initdraw(nil, nil, "rio") < 0)
 		sysfatal("initdraw: %r");
 	kbctl = initkbd(nil, nil);
 	if(kbctl == nil)

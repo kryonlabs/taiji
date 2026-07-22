@@ -1,6 +1,6 @@
 < /$objtype/mkfile
 
-TARG=lola
+TARG=rio
 OFILES=\
 	main.$O \
 	text.$O \

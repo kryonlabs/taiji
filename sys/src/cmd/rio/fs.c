@@ -1072,7 +1072,7 @@ startfs(void)
 		panic("pipe");
 	fsys.outfd = fsys.infd;
 	user = getuser();
-	snprint(srvpipe, sizeof(srvpipe), "lola.%s.%lud", user, (ulong)getpid());
+	snprint(srvpipe, sizeof(srvpipe), "rio.%s.%lud", user, (ulong)getpid());
 	post(srvpipe, fsysfd);
 //	chatty9p++;
 	threadcreate(srvthread, nil, mainstacksize);
