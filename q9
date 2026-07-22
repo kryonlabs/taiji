@@ -8,6 +8,7 @@ cd "$root"
 state=boot/q9
 rundir=cfg/q9
 runrc=$rundir/run.rc
+prelolarc=$rundir/prelola.rc
 seriallog=$state/serial.log
 serialsock=$root/$state/serial.sock
 monitorsock=$root/$state/monitor.sock
@@ -31,7 +32,8 @@ smp=${Q9_SMP:-1}
 boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
-autosave=${Q9_AUTOSAVE:-1}
+autosave=${Q9_CHECKPOINT:-0}
+buildlola=${Q9_BUILD_LOLA:-1}
 fresh=false
 hadsession=false
 
@@ -45,12 +47,13 @@ usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [conso
        ./q9 [--mini] [--raw] [--smp n] acme|rio|lola [args...]
 
 Default mode boots Glenda's normal graphical Plan 9 profile.
-Default graphical mode resumes boot/q9/session.vmstate when present and
-saves only a clean pre-lola boot checkpoint, not open windows.
+Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
+disabled by default because restored u9fs mounts can hang demand-loaded binaries.
 
 Use --text, tty, or shell to boot a clean rc console on QEMU serial stdio.
-Use --fresh to ignore the saved graphical session for this run.
-Use --no-autosave or Q9_AUTOSAVE=0 to disable checkpoint save/resume.
+Use --fresh to ignore an experimental checkpoint for this run.
+Set Q9_CHECKPOINT=1 to try experimental pre-lola checkpoint save/resume.
+Set Q9_BUILD_LOLA=0 to skip rebuilding lola before graphical launch.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
@@ -86,6 +89,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--no-autosave)
 		autosave=0
+		shift
+		;;
+	--checkpoint)
+		autosave=1
 		shift
 		;;
 	--smp)
@@ -180,7 +187,26 @@ write_runrc()
 
 clear_runrc()
 {
-	rm -f "$runrc" "$runrc".*
+	rm -f "$runrc" "$runrc".* "$prelolarc" "$prelolarc".*
+}
+
+write_prelolarc()
+{
+	tmp=$prelolarc.$$
+	if [ "$profile" = true ] && [ "$textonly" != true ] && [ "$buildlola" = 1 ]; then
+		{
+			printf '#!/bin/rc\n'
+			printf 'echo q9: rebuilding lola\n'
+			printf 'cd /sys/src/cmd/lola\n'
+			printf 'rm -f main.8 panel.8 theme.8 8.out /386/bin/lola\n'
+			printf 'mk install\n'
+		} >"$tmp"
+	else
+		{
+			printf '#!/bin/rc\n'
+		} >"$tmp"
+	fi
+	mv "$tmp" "$prelolarc"
 }
 
 cleanup_runtime()
@@ -419,6 +445,9 @@ run_clean()
 	if qemu_autosave; then
 		acquire_runlock
 		trap 'cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+	fi
+	if [ "$profile" = true ] && [ "$textonly" != true ]; then
+		write_prelolarc
 	fi
 	build_u9fs
 	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"

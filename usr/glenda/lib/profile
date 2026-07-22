@@ -41,6 +41,8 @@ case terminal
 			. /cfg/q9/run.rc
 		exec rc
 	}
+	if(test -r /cfg/q9/prelola.rc)
+		. /cfg/q9/prelola.rc
 	echo q9: gui ready
 	exec lola -theme win2k -i riostart
 case cpu

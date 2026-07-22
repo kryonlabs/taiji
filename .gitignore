@@ -25,3 +25,5 @@ boot/q9/session.kind.bad
 boot/q9/run.lock
 cfg/q9/run.rc
 cfg/q9/run.rc.*
+cfg/q9/prelola.rc
+cfg/q9/prelola.rc.*
