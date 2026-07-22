@@ -417,6 +417,38 @@ submenuitemat(Point p)
 	return -1;
 }
 
+static void
+panelcontextmenu(Mousectl *mc)
+{
+	enum {
+		PanelRefresh,
+		Bottom,
+		HidePanel,
+	};
+	static char *str[] = {
+		"Refresh Panel",
+		"Bottom Edge",
+		"Hide Panel",
+		nil,
+	};
+	static Menu menu = { str };
+
+	switch(menuhit(3, mc, &menu, wscreen)){
+	case PanelRefresh:
+		paneldraw();
+		break;
+	case Bottom:
+		edge = PanelBottom;
+		panelreset();
+		refresh();
+		break;
+	case HidePanel:
+		edge = PanelOff;
+		refresh();
+		break;
+	}
+}
+
 static int
 menumouse(Mousectl *mc)
 {
@@ -523,7 +555,7 @@ panelmouse(Mousectl *mc)
 		}
 	}
 	if(mc->buttons & 4)
-		menushow();
+		panelcontextmenu(mc);
 	drainmouse(mc, nil);
 	paneldraw();
 	return 1;
