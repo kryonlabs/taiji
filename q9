@@ -36,12 +36,13 @@ autosave=${Q9_CHECKPOINT:-0}
 buildrio=${Q9_BUILD_RIO:-1}
 fresh=false
 hadsession=false
+headless=false
 
 usage()
 {
 	status=${1:-1}
 	cat >&2 <<EOF
-usage: ./q9 [--text] [--mini] [--raw] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
+usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
        ./q9 [--text] [--mini] [--raw] [--smp n] run command
        ./q9 [--mini] [--raw] [--smp n] tty-run command
        ./q9 [--mini] [--raw] [--smp n] acme|rio [args...]
@@ -77,6 +78,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--mini)
 		image=boot/mini.raw
+		shift
+		;;
+	--headless)
+		headless=true
 		shift
 		;;
 	--raw)
@@ -362,6 +367,10 @@ save_session()
 qemu_common()
 {
 	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
+	if [ "$headless" = true ]; then
+		set -- -display none -vnc 127.0.0.1:0 \
+			-monitor "unix:$monitorsock,server=on,wait=off" "$@"
+	fi
 	tftp="tftp=$root"
 	if qemu_autosave; then
 		if [ "$fresh" != true ] && has_checkpoint; then
@@ -516,6 +525,7 @@ case "$mode" in
 console|shell)
 	clear_runrc
 	if [ "$raw" = true ]; then
+		write_preriorc
 		run_foreground
 	else
 		run_clean

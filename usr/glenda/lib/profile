@@ -32,7 +32,12 @@ if(~ $q9unix 1){
 switch($service){
 case terminal
 	plumber
-	echo -n accelerated > '#m/mousectl'
+	if(~ $q9unix 1)
+		# linear: QEMU VNC maps absolute pointers with 1:1 deltas;
+		# acceleration makes the guest cursor drift from the client's
+		echo -n linear > '#m/mousectl'
+	if not
+		echo -n accelerated > '#m/mousectl'
 	echo -n 'res 3' > '#m/mousectl'
 	prompt=('term% ' '	')
 	fn term%{ $* }
