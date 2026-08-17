@@ -1,6 +1,6 @@
 #!/bin/rc
-if(test -x /bin/colors)
-	colors
+if(test -x /bin/q9display)
+	exec q9display
 echo Control Panel - Display
 echo
 echo Theme: win2k
