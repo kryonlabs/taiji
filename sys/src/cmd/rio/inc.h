@@ -364,6 +364,7 @@ enum {
 	Kwin = 0xF868,	/* matches Win=Spec|0x68 in the pc kernel kbd tables */
 };
 void panelwinkey(void);
+void panelshutdlg(void);
 void panelinit(void);
 void paneldraw(void);
 void panelreset(void);

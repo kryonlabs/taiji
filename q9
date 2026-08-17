@@ -205,9 +205,8 @@ write_preriorc()
 				printf 'q9splashslow=1\n'
 				printf 'export q9splashslow\n'
 			fi
-			printf 'echo q9: rebuilding rio\n'
+			printf 'echo q9: checking rio\n'
 			printf 'cd /sys/src/cmd/rio\n'
-			printf 'rm -f main.8 panel.8 theme.8 8.out /386/bin/rio\n'
 			printf 'mk install\n'
 		} >"$tmp"
 	else

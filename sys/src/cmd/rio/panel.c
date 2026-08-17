@@ -592,7 +592,7 @@ buildmain(void)
 	additem(mitems, &nmitems, "Run...", "q9run", Irun, SubNone, 0);
 	additem(mitems, &nmitems, nil, nil, -1, SubNone, Msep);
 	additem(mitems, &nmitems, "Log Out", "q9logout", Ioff, SubNone, 0);
-	additem(mitems, &nmitems, "Shut Down", "q9shut", Ishut, SubNone, 0);
+	additem(mitems, &nmitems, "Shut Down", "shutdlg", Ishut, SubNone, 0);
 }
 
 /* ---- start menu geometry and drawing ---- */
@@ -859,7 +859,10 @@ menuactivate(void)
 	cmd = menusel >= 0 ? mitems[menusel].cmd : nil;
 	if(cmd != nil && !(mitems[menusel].flags & Mdisable)){
 		menuhide();	/* clears the selection; keep cmd first */
-		launch(cmd);
+		if(strcmp(cmd, "shutdlg") == 0)
+			panelshutdlg();
+		else
+			launch(cmd);
 	}
 }
 
@@ -1026,6 +1029,123 @@ panelmouse(Mousectl *mc)
 	drainmouse(mc, nil);
 	paneldraw();
 	return 1;
+}
+
+
+/* ---- Windows-2000 style shut down dialog ---- */
+
+enum {
+	ShutDown,
+	ShutRestart,
+	ShutLogoff,
+	Nshutopts,
+	ShutDlgW = 340,
+	ShutDlgH = 210,
+};
+
+static char *shutopts[Nshutopts] = {
+	"Shut down",
+	"Restart",
+	"Log off",
+};
+
+static void
+shutreboot(void)
+{
+	int fd;
+
+	/* reboot with no file argument just exits the writing process */
+	fd = open("#c/reboot", OWRITE);
+	if(fd >= 0){
+		write(fd, "reboot /386/9pc", 16);
+		close(fd);
+	}
+}
+
+/*
+ * Modal dialog: what do you want to do? Blocks in the mouse thread
+ * like menuhit does. All three choices end the session cleanly and
+ * come back through the boot splash and logon screen (q9 disks are
+ * QEMU snapshots, there is nothing to flush).
+ */
+void
+panelshutdlg(void)
+{
+	static Rectangle optrect[Nshutopts];
+	Rectangle dlg, r, title, ok, cancel;
+	Image *backup;
+	Mouse m;
+	int sel, i, done, h;
+
+	h = ShutDlgH;
+	dlg = Rect((screen->r.min.x+screen->r.max.x)/2 - ShutDlgW/2,
+		(screen->r.min.y+screen->r.max.y)/2 - h/2,
+		(screen->r.min.x+screen->r.max.x)/2 + ShutDlgW/2,
+		(screen->r.min.y+screen->r.max.y)/2 + h/2);
+	title = Rect(dlg.min.x+3, dlg.min.y+3, dlg.max.x-3, dlg.min.y+24);
+	for(i = 0; i < Nshutopts; i++)
+		optrect[i] = Rect(dlg.min.x+24, dlg.min.y+40+i*24,
+			dlg.max.x-24, dlg.min.y+40+(i+1)*24);
+	ok = Rect(dlg.max.x-170, dlg.max.y-42, dlg.max.x-90, dlg.max.y-20);
+	cancel = Rect(dlg.max.x-80, dlg.max.y-42, dlg.max.x-16, dlg.max.y-20);
+
+	backup = allocimage(display, dlg, screen->chan, 0, -1);
+	if(backup)
+		draw(backup, dlg, screen, nil, dlg.min);
+	sel = ShutDown;
+	done = 0;
+
+Redraw:
+	draw(screen, dlg, face, nil, ZP);
+	winborder(screen, dlg, darkshadow, hilite);
+	winborder(screen, insetrect(dlg, 1), shadow, face);
+	draw(screen, title, active, nil, ZP);
+	string(screen, Pt(title.min.x+8, title.min.y+(Dy(title)-font->height)/2),
+		display->white, ZP, font, "Shut Down Plan 9");
+	string(screen, Pt(dlg.min.x+20, dlg.min.y+34),
+		display->black, ZP, font, "What do you want the computer to do?");
+	for(i = 0; i < Nshutopts; i++){
+		r = insetrect(optrect[i], 2);
+		draw(screen, r, menuback, nil, ZP);
+		winborder(screen, r, shadow, hilite);
+		if(i == sel)
+			draw(screen, Rect(r.min.x+3, r.min.y+3, r.min.x+9, r.min.y+9),
+				darkshadow, nil, ZP);
+		string(screen, Pt(r.min.x+14, r.min.y+(Dy(r)-font->height)/2),
+			display->black, ZP, font, shutopts[i]);
+	}
+	button(ok, "OK", -1, 0);
+	button(cancel, "Cancel", -1, 0);
+	flushimage(display, 1);
+
+	while(!done){
+		readmouse(mctl);
+		m = mctl->Mouse;
+		if(!(m.buttons & 1))
+			continue;
+		drainmouse(mctl, nil);
+		for(i = 0; i < Nshutopts; i++)
+			if(ptinrect(m.xy, insetrect(optrect[i], 2))){
+				if(i != sel){
+					sel = i;
+					goto Redraw;
+				}
+				break;
+			}
+		if(ptinrect(m.xy, ok))
+			break;
+		if(ptinrect(m.xy, cancel)){
+			done = 1;
+			break;
+		}
+	}
+	if(backup){
+		draw(screen, dlg, backup, nil, dlg.min);
+		freeimage(backup);
+		flushimage(display, 1);
+	}
+	if(!done)
+		shutreboot();
 }
 
 int

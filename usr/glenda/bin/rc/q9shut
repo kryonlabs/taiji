@@ -9,7 +9,7 @@ echo '  It is now safe to turn off your computer.'
 echo '  (rebooting this q9 VM instead)'
 echo
 sleep 2
-if(! echo reboot >/dev/reboot >[2]$home/lib/q9shut.err){
+if(! echo reboot /386/9pc >/dev/reboot >[2]$home/lib/q9shut.err){
 	echo 'q9shut: reboot write failed' >[1=2]
 	cat $home/lib/q9shut.err >[1=2]
 	exit failed

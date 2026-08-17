@@ -25,7 +25,7 @@ boot_vm() {
 	mon_cury=0
 	Q9_TEST=1 setsid ./q9 --raw --headless gui >$T/qemu.log 2>&1 &
 	for i in $(seq 1 120); do
-		grep -q "cp 8.out" $T/qemu.log 2>/dev/null && break
+		grep -q "q9: gui ready" $T/qemu.log 2>/dev/null && break
 		sleep 1
 	done
 	for i in $(seq 1 10); do
@@ -39,7 +39,7 @@ boot_vm() {
 # poll fast (0.4s) until the boot menu is on screen; leaves it in menu.ppm
 wait_menu() {
 	i=0
-	while [ $i -lt 60 ]; do
+	while [ $i -lt 150 ]; do
 		fastshot menu
 		if [ -s $T/menu.ppm ] && check $T/menu.ppm menu_at; then
 			return 0

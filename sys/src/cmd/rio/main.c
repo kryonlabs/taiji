@@ -1066,14 +1066,27 @@ Channel *totap;		/* our keyboard input to tap program */
 static int
 winkey(char *s)
 {
-	static int down;
+	static int windown;
+	static int cctl;	/* console path has no key-release events */
 	Rune r;
+	char *p;
+	int ctl;
 
+	/*
+	 * The start menu opens on the win key, or the classic Ctrl+Esc
+	 * shortcut (the host window manager usually eats the win key
+	 * before QEMU sees it). Events arrive either as console c<C>
+	 * strings, one rune per press, or as raw /dev/kbd k/K lines.
+	 */
 	if(*s == 'c'){
-		s++;
-		while(*s){
-			s += chartorune(&r, s);
-			if(r == Kwin){
+		p = s+1;
+		while(*p){
+			p += chartorune(&r, p);
+			if(r == Kctl)
+				cctl = 1;
+			else if(r != Kesc)
+				cctl = 0;
+			if(r == Kwin || (r == Kesc && cctl)){
 				panelwinkey();
 				return 1;
 			}
@@ -1082,13 +1095,21 @@ winkey(char *s)
 	}
 	if(*s != 'k' && *s != 'K')
 		return 0;
+	ctl = utfrune(s+1, Kctl) != nil;
+	if(ctl && utfrune(s+1, Kesc) != nil){
+		if(*s == 'k'){
+			panelwinkey();
+			return 1;
+		}
+		return 1;	/* release: consume */
+	}
 	if(utfrune(s+1, Kwin) != nil){
-		if(*s == 'k' && !down){
-			down = 1;
+		if(*s == 'k' && !windown){
+			windown = 1;
 			panelwinkey();
 		}
 		if(*s == 'K')
-			down = 0;
+			windown = 0;
 		return 1;
 	}
 	return 0;
