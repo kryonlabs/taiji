@@ -19,6 +19,8 @@ Image *fakebg;
 
 Channel *pickchan;
 Channel *splashdone;
+Channel *logonchan;
+int inlogon;
 
 void
 killprocs(void)
@@ -900,12 +902,15 @@ mthread(void*)
 	threadsetname("mousethread");
 	recvul(splashdone);
 	enum { Amouse, Apick, NALT };
+
 	Alt alts[NALT+1] = {
 		[Amouse]	{.c = mctl->c, .v = &mctl->Mouse, .op = CHANRCV},
 		[Apick]		{.c = pickchan, .v = &wc, .op = CHANRCV},
 		[NALT]		{.op = CHANEND},
 	};
 	for(;;){
+		if(inlogon)
+			recvul(logonchan);
 		// normally done in readmouse
 		Display *d = mctl->image->display;
 		if(d->bufp > d->buf)
@@ -1142,6 +1147,8 @@ keyboardtap(void*)
 	memset(&tapq, 0, sizeof(tapq));
 	cur = nil;
 	for(;;){
+		if(inlogon)
+			recvul(logonchan);
 		if(alts[Atotap].c && !qempty(&tapq))
 			alts[Atotap].op = CHANSND;
 		else
@@ -1349,6 +1356,7 @@ threadmain(int argc, char *argv[])
 	timerinit();
 
 	splashdone = chancreate(sizeof(ulong), 3);
+	logonchan = chancreate(sizeof(ulong), 2);
 	threadcreate(splashthread, nil, mainstacksize);
 	threadcreate(mthread, nil, mainstacksize);
 	threadcreate(resthread, nil, mainstacksize);

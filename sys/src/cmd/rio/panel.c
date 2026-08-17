@@ -591,7 +591,7 @@ buildmain(void)
 	additem(mitems, &nmitems, "Settings", nil, Ictl, SubSettings, 0);
 	additem(mitems, &nmitems, "Run...", "q9run", Irun, SubNone, 0);
 	additem(mitems, &nmitems, nil, nil, -1, SubNone, Msep);
-	additem(mitems, &nmitems, "Log Out", "q9logout", Ioff, SubNone, 0);
+	additem(mitems, &nmitems, "Log Out", "logout", Ioff, SubNone, 0);
 	additem(mitems, &nmitems, "Shut Down", "shutdlg", Ishut, SubNone, 0);
 }
 
@@ -861,6 +861,8 @@ menuactivate(void)
 		menuhide();	/* clears the selection; keep cmd first */
 		if(strcmp(cmd, "shutdlg") == 0)
 			panelshutdlg();
+		else if(strcmp(cmd, "logout") == 0)
+			splashlogout();
 		else
 			launch(cmd);
 	}

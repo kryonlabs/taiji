@@ -365,6 +365,9 @@ enum {
 };
 void panelwinkey(void);
 void panelshutdlg(void);
+void splashlogout(void);
+extern int inlogon;
+extern Channel *logonchan;
 void panelinit(void);
 void paneldraw(void);
 void panelreset(void);

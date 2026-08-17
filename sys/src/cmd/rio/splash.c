@@ -370,6 +370,7 @@ logon(Logon *lg, Rectangle clip)
 		switch(alt(alts)){
 		case 0:
 			blink = !blink;
+			logonbackdrop(clip);	/* cover late window restores after logout */
 			logondraw(lg, blink);
 			break;
 		case 1:
@@ -421,6 +422,47 @@ progressbar(Rectangle clip)
 	}
 }
 
+static void
+logonsetup(Logon *lg, Rectangle clip)
+{
+	memset(lg, 0, sizeof *lg);
+	lg->dlg = Rect((clip.min.x+clip.max.x)/2-190, (clip.min.y+clip.max.y)/2-105,
+		(clip.min.x+clip.max.x)/2+190, (clip.min.y+clip.max.y)/2+105);
+	lg->pass = Rect(lg->dlg.min.x+160, lg->dlg.min.y+77, lg->dlg.max.x-20, lg->dlg.min.y+77+font->height+6);
+	lg->ok = Rect(lg->dlg.max.x-230, lg->dlg.max.y-58, lg->dlg.max.x-150, lg->dlg.max.y-34);
+	lg->shut = Rect(lg->dlg.max.x-140, lg->dlg.max.y-58, lg->dlg.max.x-20, lg->dlg.max.y-34);
+}
+
+/*
+ * Real log out: end the user's session, show the logon screen, and
+ * come back to a fresh desktop after logging in. The mouse and
+ * keyboard threads are parked on logonchan while the logon screen
+ * owns input, exactly like during boot.
+ */
+void
+splashlogout(void)
+{
+	Logon lg;
+
+	inlogon = TRUE;
+	killprocs();		/* end every window's command */
+	sleep(1200);		/* let windows clean themselves up */
+	logonbackdrop(screen->r);	/* hide any late restore they do */
+	sleep(400);
+	logonsetup(&lg, screen->r);
+	lgface = getcolor(nil, 0xC0C0C0FF);
+	lgnavy = getcolor(nil, 0x000080FF);
+	lgdim = getcolor(nil, 0x808080FF);
+	logon(&lg, screen->r);
+
+	inlogon = FALSE;
+	sendul(logonchan, 1);
+	sendul(logonchan, 1);
+	draw(fakebg, fakebg->r, background, nil, ZP);
+	paneldraw();
+	flushimage(display, 1);
+}
+
 void
 splashthread(void*)
 {
@@ -447,15 +489,10 @@ splashthread(void*)
 		panelsetedge("off");
 	progressbar(clip);
 
-	memset(&lg, 0, sizeof lg);
-	lg.dlg = Rect((clip.min.x+clip.max.x)/2-190, (clip.min.y+clip.max.y)/2-105,
-		(clip.min.x+clip.max.x)/2+190, (clip.min.y+clip.max.y)/2+105);
-	lg.pass = Rect(lg.dlg.min.x+160, lg.dlg.min.y+77, lg.dlg.max.x-20, lg.dlg.min.y+77+font->height+6);
-	lg.ok = Rect(lg.dlg.max.x-230, lg.dlg.max.y-58, lg.dlg.max.x-150, lg.dlg.max.y-34);
-	lg.shut = Rect(lg.dlg.max.x-140, lg.dlg.max.y-58, lg.dlg.max.x-20, lg.dlg.max.y-34);
 	lgface = getcolor(nil, 0xC0C0C0FF);
 	lgnavy = getcolor(nil, 0x000080FF);
 	lgdim = getcolor(nil, 0x808080FF);
+	logonsetup(&lg, screen->r);
 	logon(&lg, clip);
 
 	sendul(splashdone, 1);
