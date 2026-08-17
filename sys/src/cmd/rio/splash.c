@@ -250,7 +250,7 @@ logonreboot(void)
 
 	fd = open("#c/reboot", OWRITE);
 	if(fd >= 0){
-		write(fd, "reboot", 6);
+		write(fd, "reboot /386/9pc", 16);
 		close(fd);
 	}
 }
@@ -429,6 +429,7 @@ splashthread(void*)
 	int boot;
 
 	threadsetname("splash");
+	setcursornormal(&whitearrow);
 	if(getenv("q9nosplash") != nil){
 		sendul(splashdone, 1);
 		sendul(splashdone, 1);
