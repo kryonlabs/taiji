@@ -18,6 +18,7 @@ Screen *wscreen;
 Image *fakebg;
 
 Channel *pickchan;
+Channel *splashdone;
 
 void
 killprocs(void)
@@ -897,6 +898,7 @@ mthread(void*)
 	Channel *wc;
 
 	threadsetname("mousethread");
+	recvul(splashdone);
 	enum { Amouse, Apick, NALT };
 	Alt alts[NALT+1] = {
 		[Amouse]	{.c = mctl->c, .v = &mctl->Mouse, .op = CHANRCV},
@@ -1066,6 +1068,7 @@ keyboardtap(void*)
 	Queue tapq;
 
 	threadsetname("keyboardtap");
+	recvul(splashdone);
 
 	fschan = chancreate(sizeof(Stringpair), 0);
 	enum { Akbd, Afromtap, Atotap, Aopen, Aclose,  NALT };
@@ -1285,11 +1288,14 @@ threadmain(int argc, char *argv[])
 
 	timerinit();
 
-
+	splashdone = chancreate(sizeof(ulong), 3);
+	threadcreate(splashthread, nil, mainstacksize);
 	threadcreate(mthread, nil, mainstacksize);
 	threadcreate(resthread, nil, mainstacksize);
 	threadcreate(keyboardtap, nil, mainstacksize);
 
+	recvul(splashdone);
+	draw(fakebg, fakebg->r, background, nil, ZP);
 	paneldraw();
 	flushimage(display, 1);
 

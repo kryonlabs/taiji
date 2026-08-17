@@ -29,3 +29,9 @@ cfg/q9/run.rc
 cfg/q9/run.rc.*
 cfg/q9/prerio.rc
 cfg/q9/prerio.rc.*
+boot/q9/*.ppm
+boot/q9/*.png
+boot/q9/*.err
+boot/q9/test.log
+boot/q9/tty.log
+boot/q9/probe.ppm

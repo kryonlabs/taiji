@@ -1,0 +1,21 @@
+#!/bin/rc
+# Windows-2000 style log out: end this rio session. init restarts the
+# profile, which replays the boot splash and the logon screen.
+
+f=/proc/$pid/args
+p=$pid
+# walk up to the rio process and terminate it
+for(i in 1 2 3 4 5 6 7 8){
+	if(! test -r /proc/$p/ppid)
+		break
+	p=`{cat /proc/$p/ppid}
+	if(test -r /proc/$p/args && grep -s '^rio ' /proc/$p/args){
+		echo 'log out: ending session'
+		kill $p >/dev/null >[2=1]
+		exit
+	}
+	if(~ $p 1)
+		break
+}
+echo 'log out: rio not found' >[1=2]
+exit notfound

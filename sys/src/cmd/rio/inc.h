@@ -122,6 +122,7 @@ extern int ndesky;
 extern Screen *wscreen;
 extern Image *fakebg;
 extern Mousectl *mctl;
+extern RKeyboardctl *kbctl;
 extern char *startdir;
 extern bool shiftdown, ctldown;
 extern bool gotscreen;
@@ -356,6 +357,8 @@ void btn3menu(void);
 WinTab *new(Rectangle r);
 void killprocs(void);
 
+void splashthread(void*);
+extern Channel *splashdone;
 void panelinit(void);
 void paneldraw(void);
 void panelreset(void);
