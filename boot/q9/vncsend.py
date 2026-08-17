@@ -17,7 +17,7 @@ names = {
     "esc": 0xff1b, "del": 0xffff, "enter": 0xff0d, "bs": 0xff08,
 }
 
-s = socket.create_connection(("127.0.0.1", 5900), timeout=5)
+s = socket.create_connection(("127.0.0.1", int(__import__("os").environ.get("Q9_VNC_PORT", "5901"))), timeout=5)
 s.settimeout(5)
 recvn(s, 12)
 s.sendall(b"RFB 003.008\n")

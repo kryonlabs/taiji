@@ -60,6 +60,11 @@ def main():
             if pix(x, y) != c:
                 sys.exit(1)
         sys.exit(0)
+    if check == "menu_at":
+        # boot manager menu: solid white highlight bar on the first entry
+        # (kernel boot text is black+white too, but has no solid runs)
+        n = sum(1 for x in range(45, 360) if pix(x, 100) == (255, 255, 255))
+        sys.exit(0 if n > 200 else 1)
     if check == "logon_at":
         # backdrop: win2k logon blue band near top; dialog grey at center
         r, g, b = pix(100, 60)

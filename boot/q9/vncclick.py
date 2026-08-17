@@ -11,7 +11,7 @@ def recvn(s, n):
     return b
 
 x, y = int(sys.argv[1]), int(sys.argv[2])
-s = socket.create_connection(("127.0.0.1", 5900), timeout=5)
+s = socket.create_connection(("127.0.0.1", int(__import__("os").environ.get("Q9_VNC_PORT", "5901"))), timeout=5)
 s.settimeout(5)
 recvn(s, 12)                       # server version
 s.sendall(b"RFB 003.008\n")

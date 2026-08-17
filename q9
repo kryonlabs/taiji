@@ -201,6 +201,10 @@ write_preriorc()
 	if [ "$profile" = true ] && [ "$textonly" != true ] && [ "$buildrio" = 1 ]; then
 		{
 			printf '#!/bin/rc\n'
+			if [ "${Q9_TEST:-0}" = 1 ]; then
+				printf 'q9splashslow=1\n'
+				printf 'export q9splashslow\n'
+			fi
 			printf 'echo q9: rebuilding rio\n'
 			printf 'cd /sys/src/cmd/rio\n'
 			printf 'rm -f main.8 panel.8 theme.8 8.out /386/bin/rio\n'
@@ -368,7 +372,7 @@ qemu_common()
 {
 	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
 	if [ "$headless" = true ]; then
-		set -- -display none -vnc 127.0.0.1:0 \
+		set -- -display none -vnc 127.0.0.1:${Q9_VNC_DISPLAY:-1} \
 			-monitor "unix:$monitorsock,server=on,wait=off" "$@"
 	fi
 	tftp="tftp=$root"

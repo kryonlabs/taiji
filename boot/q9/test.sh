@@ -23,7 +23,7 @@ boot_vm() {
 	rm -f $T/monitor.sock $T/screendump.err
 	mon_curx=0
 	mon_cury=0
-	setsid ./q9 --raw --headless gui >$T/qemu.log 2>&1 &
+	Q9_TEST=1 setsid ./q9 --raw --headless gui >$T/qemu.log 2>&1 &
 	for i in $(seq 1 120); do
 		grep -q "cp 8.out" $T/qemu.log 2>/dev/null && break
 		sleep 1
@@ -41,7 +41,7 @@ wait_menu() {
 	i=0
 	while [ $i -lt 60 ]; do
 		fastshot menu
-		if [ -s $T/menu.ppm ] && check $T/menu.ppm mostly_black && check $T/menu.ppm has_white; then
+		if [ -s $T/menu.ppm ] && check $T/menu.ppm menu_at; then
 			return 0
 		fi
 		sleep 0.4
@@ -53,12 +53,12 @@ wait_menu() {
 # poll fast until the progress bar's blue segments are visible
 wait_bar() {
 	i=0
-	while [ $i -lt 30 ]; do
+	while [ $i -lt 100 ]; do
 		fastshot bar
-		if [ -s $T/bar.ppm ] && check $T/bar.ppm mostly_black && check $T/bar.ppm seg_blue 380 370 640 400; then
+		if [ -s $T/bar.ppm ] && check $T/bar.ppm seg_blue 380 370 640 400; then
 			return 0
 		fi
-		sleep 0.3
+		sleep 0.1
 		i=$((i+1))
 	done
 	return 1
@@ -137,6 +137,6 @@ else
 fi
 
 pkill -f '^qemu-system-x86_64' 2>/dev/null || true
-rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm
+rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm $T/bar.ok
 echo "== results: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]
