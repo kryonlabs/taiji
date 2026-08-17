@@ -14,6 +14,8 @@ enum {
 	Iconw = 108,
 	Iconh = 72,
 	Maxpath = 512,
+	Maxhist = 32,
+	Mitemh = 20,
 };
 
 enum {
@@ -38,23 +40,33 @@ struct TreeItem {
 	Rectangle r;
 };
 
-Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow;
+Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow, *blue, *navy;
 Entry *ents;
 int nents;
 char cwd[Maxpath];
 int scroll;
 int selectedtree = -1;
 int viewmode = ViewList;
+int sel = -1;			/* selected entry */
+char clipboard[Maxpath];	/* copied/cut path */
+int clipcut;
+static char hist[Maxhist][Maxpath];
+static int nhist;
+static int hpos;
+static ulong lastclick;
+static int lastsel;
 TreeItem tree[] = {
 	{ "My Computer", "/", 10, 10 },
 	{ "Namespace", "/", 22, 32 },
 	{ "/", "/", 34, 54 },
 	{ "/mnt", "/mnt", 34, 76 },
 	{ "/usr/glenda", "/usr/glenda", 34, 98 },
-	{ "Control Panel", "/lib/controlpanel", 22, 120 },
+	{ "Recycle Bin", "", 22, 120 },
+	{ "Control Panel", "/lib/controlpanel", 22, 142 },
 };
 
 Rectangle listrect(void);
+void redraw(void);
 
 void
 settreeforpath(char *path)
@@ -125,6 +137,28 @@ controlpanel(void)
 	return strcmp(cwd, "/lib/controlpanel") == 0;
 }
 
+static char *
+trashdir(void)
+{
+	static char t[Maxpath];
+	char *home;
+
+	home = getenv("home");
+	if(home == nil)
+		strecpy(t, t+sizeof t, "/tmp");
+	else{
+		snprint(t, sizeof t, "%s/.trash", home);
+		free(home);
+	}
+	return t;
+}
+
+int
+trashview(void)
+{
+	return strcmp(cwd, trashdir()) == 0;
+}
+
 void
 drawcpicon(Rectangle r, char *name)
 {
@@ -191,7 +225,7 @@ openfile(char *path)
 	fd = open("/dev/wctl", OWRITE);
 	if(fd < 0)
 		return;
-	fprint(fd, "new -r 90 100 790 570 acme %s", path);
+	fprint(fd, "new -r 90 100 790 570 jot %s", path);
 	close(fd);
 }
 
@@ -243,6 +277,26 @@ cpitemat(Point p)
 			break;
 	}
 	return -1;
+}
+
+/* unified: which entry is at p, in any view */
+int
+itemat(Point p)
+{
+	Rectangle lr;
+	int i;
+
+	if(controlpanel())
+		return cpitemat(p);
+	lr = listrect();
+	if(!ptinrect(p, lr))
+		return -1;
+	if(viewmode == ViewIcon)
+		return iconitemat(p);
+	i = scroll + (p.y - (lr.min.y+27))/Rowh;
+	if(i < 0 || i >= nents)
+		return -1;
+	return i;
 }
 
 void
@@ -304,10 +358,54 @@ loaddir(char *path)
 	}
 	nents = off;
 	scroll = 0;
+	sel = -1;
 	strecpy(cwd, cwd+sizeof cwd, path);
 	settreeforpath(cwd);
 	free(d);
 	return 0;
+}
+
+/* navigate with Back/Forward history */
+void
+navigate(char *path)
+{
+	char clean[Maxpath];
+
+	strecpy(clean, clean+sizeof clean, path);
+	cleanname(clean);
+	if(loaddir(clean) != 0)
+		return;
+	if(hpos >= 0 && hpos < nhist && strcmp(hist[hpos], cwd) == 0)
+		goto Out;
+	if(hpos+1 >= Maxhist){
+		memmove(hist, hist+1, sizeof hist - Maxpath);
+		nhist--;
+	}
+	hpos++;
+	strecpy(hist[hpos], hist[hpos]+Maxpath, cwd);
+	nhist = hpos+1;
+Out:
+	redraw();
+}
+
+void
+goback(void)
+{
+	if(hpos > 0){
+		hpos--;
+		loaddir(hist[hpos]);
+		redraw();
+	}
+}
+
+void
+goforward(void)
+{
+	if(hpos+1 < nhist){
+		hpos++;
+		loaddir(hist[hpos]);
+		redraw();
+	}
 }
 
 Rectangle
@@ -327,17 +425,24 @@ drawtree(Rectangle r)
 {
 	int i;
 	Point p;
+	char *t;
 
 	draw(screen, r, white, nil, ZP);
 	bevel(r, 1);
 	for(i = 0; i < nelem(tree); i++){
 		p = Pt(r.min.x+tree[i].indent, r.min.y+tree[i].y);
 		tree[i].r = Rect(r.min.x+4, p.y-3, r.max.x-4, p.y+font->height+3);
+		t = tree[i].label;
+		if(tree[i].path[0] == 0){
+			/* recycle bin */
+			strecpy(tree[i].path, tree[i].path+Maxpath, trashdir());
+			t = tree[i].label;
+		}
 		if(i == selectedtree){
 			draw(screen, tree[i].r, hilite, nil, ZP);
 			border(screen, tree[i].r, 1, shadow, ZP);
 		}
-		string(screen, p, text, ZP, font, tree[i].label);
+		string(screen, p, text, ZP, font, t);
 	}
 }
 
@@ -352,10 +457,11 @@ redraw(void)
 	r = Rect(screen->r.min.x, screen->r.min.y, screen->r.max.x, screen->r.min.y+Toolbarh);
 	draw(screen, r, face, nil, ZP);
 	btn(Rect(r.min.x+6, r.min.y+4, r.min.x+6+Btnw, r.max.y-4), "Back");
-	btn(Rect(r.min.x+82, r.min.y+4, r.min.x+82+Btnw, r.max.y-4), "Up");
-	btn(Rect(r.min.x+158, r.min.y+4, r.min.x+158+Btnw+12, r.max.y-4), "Refresh");
-	btn(Rect(r.min.x+252, r.min.y+4, r.min.x+252+Btnw+18, r.max.y-4), "New Dir");
-	btn(Rect(r.min.x+352, r.min.y+4, r.min.x+352+Btnw, r.max.y-4), viewmode == ViewList ? "Icons" : "List");
+	btn(Rect(r.min.x+80, r.min.y+4, r.min.x+80+Btnw, r.max.y-4), "Forward");
+	btn(Rect(r.min.x+154, r.min.y+4, r.min.x+154+Btnw, r.max.y-4), "Up");
+	btn(Rect(r.min.x+228, r.min.y+4, r.min.x+228+Btnw+12, r.max.y-4), "Refresh");
+	btn(Rect(r.min.x+322, r.min.y+4, r.min.x+322+Btnw+18, r.max.y-4), "New Dir");
+	btn(Rect(r.min.x+412, r.min.y+4, r.min.x+412+Btnw, r.max.y-4), viewmode == ViewList ? "Icons" : "List");
 
 	r = Rect(screen->r.min.x, screen->r.min.y+Toolbarh, screen->r.max.x, screen->r.min.y+Toolbarh+Addrh);
 	draw(screen, r, face, nil, ZP);
@@ -382,7 +488,7 @@ redraw(void)
 			if(strcmp(ents[i].name, "..") == 0)
 				continue;
 			row = Rect(x, y, x+108, y+72);
-			if(i == scroll){
+			if(i == sel){
 				draw(screen, row, hilite, nil, ZP);
 				border(screen, row, 1, dark, ZP);
 			}
@@ -407,6 +513,12 @@ redraw(void)
 			drawfileicon(row, ents[i].isdir, 1);
 			string(screen, Pt(row.min.x+(Dx(row)-stringwidth(font, ents[i].name))/2,
 				row.min.y+48), text, ZP, font, ents[i].name);
+			if(i == sel){
+				int w = stringwidth(font, ents[i].name);
+				draw(screen, Rect(row.min.x+(Dx(row)-w)/2-2, row.min.y+47,
+					row.min.x+(Dx(row)-w)/2+w+2, row.min.y+47+font->height+2), navy, nil, ZP);
+				string(screen, Pt(row.min.x+(Dx(row)-w)/2, row.min.y+48), white, ZP, font, ents[i].name);
+			}
 			x += Iconw + 14;
 			if(x+Iconw > lr.max.x-12){
 				x = lr.min.x + 20;
@@ -425,14 +537,26 @@ redraw(void)
 	y = row.max.y + 3;
 	for(i = scroll; i < nents && y+Rowh < lr.max.y-4; i++){
 		row = Rect(lr.min.x+4, y, lr.max.x-4, y+Rowh);
-		drawfileicon(row, ents[i].isdir, 0);
-		string(screen, Pt(row.min.x+34, row.min.y+3), text, ZP, font, ents[i].name);
-		if(ents[i].isdir)
-			snprint(buf, sizeof buf, "");
-		else
-			snprint(buf, sizeof buf, "%lld", ents[i].len);
-		string(screen, Pt(row.min.x+230, row.min.y+3), text, ZP, font, buf);
-		string(screen, Pt(row.min.x+320, row.min.y+3), text, ZP, font, ents[i].type);
+		if(i == sel){
+			draw(screen, row, navy, nil, ZP);
+			drawfileicon(row, ents[i].isdir, 0);
+			string(screen, Pt(row.min.x+34, row.min.y+3), white, ZP, font, ents[i].name);
+			if(ents[i].isdir)
+				snprint(buf, sizeof buf, "");
+			else
+				snprint(buf, sizeof buf, "%lld", ents[i].len);
+			string(screen, Pt(row.min.x+230, row.min.y+3), white, ZP, font, buf);
+			string(screen, Pt(row.min.x+320, row.min.y+3), white, ZP, font, ents[i].type);
+		}else{
+			drawfileicon(row, ents[i].isdir, 0);
+			string(screen, Pt(row.min.x+34, row.min.y+3), text, ZP, font, ents[i].name);
+			if(ents[i].isdir)
+				snprint(buf, sizeof buf, "");
+			else
+				snprint(buf, sizeof buf, "%lld", ents[i].len);
+			string(screen, Pt(row.min.x+230, row.min.y+3), text, ZP, font, buf);
+			string(screen, Pt(row.min.x+320, row.min.y+3), text, ZP, font, ents[i].type);
+		}
 		y += Rowh;
 	}
 
@@ -441,35 +565,717 @@ Status:
 	draw(screen, r, face, nil, ZP);
 	if(controlpanel())
 		snprint(buf, sizeof buf, "%d item%s", nents-1, nents==2 ? "" : "s");
+	else if(trashview())
+		snprint(buf, sizeof buf, "Recycle Bin: %d object%s", nents-1, nents==2 ? "" : "s");
 	else
 		snprint(buf, sizeof buf, "%d object%s", nents, nents==1 ? "" : "s");
 	string(screen, Pt(r.min.x+8, r.min.y+4), text, ZP, font, buf);
 	flushimage(display, 1);
 }
 
+/* ---- in-window popup menu ---- */
+
+static int
+menuhitx(Point p, char **items)
+{
+	Rectangle r, ir;
+	Event e;
+	Point pt;
+	int i, n, w, h, hover, cur, buttons;
+
+	for(n = 0; items[n]; n++)
+		;
+	w = 0;
+	for(i = 0; i < n; i++){
+		h = stringwidth(font, items[i][0] == '!' ? items[i]+1 : items[i]);
+		if(h > w)
+			w = h;
+	}
+	w += 30;
+	h = n*Mitemh + 6;
+	r = Rect(p.x, p.y, p.x+w, p.y+h);
+	if(r.max.x > screen->r.max.x)
+		r = rectsubpt(r, Pt(Dx(r)+p.x-screen->r.max.x, 0));
+	if(r.max.y > screen->r.max.y)
+		r = rectsubpt(r, Pt(0, Dy(r)+p.y-screen->r.max.y));
+	if(r.min.x < screen->r.min.x)
+		r.min.x = screen->r.min.x;
+	if(r.min.y < screen->r.min.y)
+		r.min.y = screen->r.min.y;
+
+	draw(screen, r, face, nil, ZP);
+	border(screen, r, 1, dark, ZP);
+	cur = -1;
+	buttons = 0;
+	for(;;){
+		/* draw items */
+		for(i = 0; i < n; i++){
+			ir = Rect(r.min.x+3, r.min.y+3+i*Mitemh, r.max.x-3, r.min.y+3+(i+1)*Mitemh);
+			if(items[i][0] == '-' && items[i][1] == 0){
+				line(screen, Pt(ir.min.x+4, ir.min.y+Mitemh/2),
+					Pt(ir.max.x-4, ir.min.y+Mitemh/2), 0, 0, 0, shadow, ZP);
+				continue;
+			}
+			if(i == cur && items[i][0] != '!'){
+				draw(screen, ir, navy, nil, ZP);
+				pt = Pt(ir.min.x+8, ir.min.y+(Mitemh-font->height)/2);
+				string(screen, pt, white, ZP, font, items[i][0]=='!' ? items[i]+1 : items[i]);
+			}else{
+				draw(screen, ir, face, nil, ZP);
+				pt = Pt(ir.min.x+8, ir.min.y+(Mitemh-font->height)/2);
+				string(screen, pt, items[i][0]=='!' ? shadow : text, ZP, font,
+					items[i][0]=='!' ? items[i]+1 : items[i]);
+			}
+		}
+		flushimage(display, 1);
+		switch(event(&e)){
+		case Emouse:
+			hover = -1;
+			if(ptinrect(e.mouse.xy, insetrect(r, 3)))
+				hover = (e.mouse.xy.y - (r.min.y+3)) / Mitemh;
+			if(hover >= n)
+				hover = -1;
+			if(hover >= 0 && (items[hover][0] == '!' ||
+			    items[hover][0] == '-' && items[hover][1] == 0))
+				hover = -1;
+			if(hover != cur){
+				cur = hover;
+			}
+			if((e.mouse.buttons & 1) && !(buttons & 1)){
+				if(cur >= 0){
+					redraw();
+					return cur;
+				}
+				redraw();
+				return -1;
+			}
+			if((e.mouse.buttons & (4|2)) && !(buttons & (4|2))){
+				redraw();
+				return -1;
+			}
+			buttons = e.mouse.buttons;
+			break;
+		case Ekeyboard:
+			if(e.kbdc == Kesc){
+				redraw();
+				return -1;
+			}
+			break;
+		}
+	}
+}
+
+/* ---- modal text entry inside the window ---- */
+
+static int
+textprompt(char *title, char *label, char *buf, int nbuf)
+{
+	Rectangle dlg, entry, ok, cancel;
+	Event e;
+	int n, done, rc, buttons;
+
+	n = strlen(buf);
+	done = 0;
+	rc = 0;
+	buttons = 0;
+
+	dlg = Rect((screen->r.min.x+screen->r.max.x)/2-190,
+		(screen->r.min.y+screen->r.max.y)/2-80,
+		(screen->r.min.x+screen->r.max.x)/2+190,
+		(screen->r.min.y+screen->r.max.y)/2+80);
+	entry = Rect(dlg.min.x+20, dlg.min.y+64, dlg.max.x-20, dlg.min.y+92);
+	ok = Rect(dlg.max.x-180, dlg.max.y-48, dlg.max.x-100, dlg.max.y-24);
+	cancel = Rect(dlg.max.x-90, dlg.max.y-48, dlg.max.x-16, dlg.max.y-24);
+
+	for(;;){
+		draw(screen, dlg, face, nil, ZP);
+		border(screen, dlg, 1, dark, ZP);
+		draw(screen, Rect(dlg.min.x+3, dlg.min.y+3, dlg.max.x-3, dlg.min.y+24), navy, nil, ZP);
+		string(screen, Pt(dlg.min.x+10, dlg.min.y+(24-font->height)/2+3), white, ZP, font, title);
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+38), text, ZP, font, label);
+		draw(screen, insetrect(entry, 1), white, nil, ZP);
+		bevel(entry, 1);
+		stringn(screen, Pt(entry.min.x+4, entry.min.y+(Dy(entry)-font->height)/2),
+			text, ZP, font, buf, n);
+		btn(ok, "OK");
+		btn(cancel, "Cancel");
+		flushimage(display, 1);
+
+		if(done)
+			break;
+		switch(event(&e)){
+		case Ekeyboard:
+			if(e.kbdc == '\n'){
+				done = 1;
+				rc = 1;
+			}else if(e.kbdc == Kesc){
+				done = 1;
+				rc = 0;
+			}else if(e.kbdc == Kbs || e.kbdc == 0x7f){
+				if(n > 0){
+					while(n > 0 && (buf[n-1] & 0xC0) == 0x80)
+						n--;
+					if(n > 0)
+						n--;
+				}
+			}else if(e.kbdc >= ' ' && e.kbdc < 0x7f && n < nbuf-2){
+				buf[n++] = e.kbdc;
+			}
+			break;
+		case Emouse:
+			if((e.mouse.buttons & 1) && !(buttons & 1)){
+				if(ptinrect(e.mouse.xy, ok)){
+					done = 1;
+					rc = 1;
+				}else if(ptinrect(e.mouse.xy, cancel)){
+					done = 1;
+					rc = 0;
+				}
+			}
+			buttons = e.mouse.buttons;
+			break;
+		}
+	}
+	buf[n] = 0;
+	redraw();
+	return rc;
+}
+
+/* ---- properties dialog ---- */
+
+static void
+properties(int i)
+{
+	Rectangle dlg, ok;
+	Event e;
+	char *cts;
+	int done, buttons;
+
+	if(i < 0 || i >= nents)
+		return;
+	cts = ctime(ents[i].mtime);
+
+	dlg = Rect((screen->r.min.x+screen->r.max.x)/2-170,
+		(screen->r.min.y+screen->r.max.y)/2-90,
+		(screen->r.min.x+screen->r.max.x)/2+170,
+		(screen->r.min.y+screen->r.max.y)/2+90);
+	ok = Rect(dlg.max.x-100, dlg.max.y-48, dlg.max.x-16, dlg.max.y-24);
+
+	done = 0;
+	buttons = 0;
+	while(!done){
+		draw(screen, dlg, face, nil, ZP);
+		border(screen, dlg, 1, dark, ZP);
+		draw(screen, Rect(dlg.min.x+3, dlg.min.y+3, dlg.max.x-3, dlg.min.y+24), navy, nil, ZP);
+		string(screen, Pt(dlg.min.x+10, dlg.min.y+(24-font->height)/2+3), white, ZP, font, "Properties");
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+40), text, ZP, font, ents[i].name);
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+58), text, ZP, font,
+			ents[i].isdir ? "Type: File Folder" : "Type: File");
+		if(!ents[i].isdir){
+			char buf[64];
+			snprint(buf, sizeof buf, "Size: %lld bytes", ents[i].len);
+			string(screen, Pt(dlg.min.x+20, dlg.min.y+76), text, ZP, font, buf);
+		}
+		if(ents[i].mtime > 0){
+			char buf[64];
+			snprint(buf, sizeof buf, "Modified: %.20s", cts);
+			string(screen, Pt(dlg.min.x+20, dlg.min.y+94), text, ZP, font, buf);
+		}
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+112), text, ZP, font, "Location:");
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+130), text, ZP, font, cwd);
+		btn(ok, "OK");
+		flushimage(display, 1);
+		switch(event(&e)){
+		case Ekeyboard:
+			if(e.kbdc == '\n' || e.kbdc == Kesc)
+				done = 1;
+			break;
+		case Emouse:
+			if((e.mouse.buttons & 1) && !(buttons & 1) && ptinrect(e.mouse.xy, ok))
+				done = 1;
+			buttons = e.mouse.buttons;
+			break;
+		}
+	}
+	redraw();
+}
+
+/* ---- file operations ---- */
+
+static int
+dircopy(char *from, char *to)
+{
+	Dir *d;
+	char *sub, *subto;
+	uchar *buf;
+	int fd, n, i, ok, in, out;
+
+	d = dirstat(from);
+	if(d == nil)
+		return -1;
+	if(!(d->mode & DMDIR)){
+		in = open(from, OREAD);
+		if(in < 0){
+			free(d);
+			return -1;
+		}
+		remove(to);
+		out = create(to, OWRITE, d->mode & 0777);
+		if(out < 0){
+			close(in);
+			free(d);
+			return -1;
+		}
+		buf = malloc(65536);
+		if(buf != nil){
+			while((n = read(in, buf, 65536)) > 0)
+				if(write(out, buf, n) < 0)
+					break;
+			free(buf);
+		}
+		close(in);
+		close(out);
+		free(d);
+		return 0;
+	}
+	free(d);
+	remove(to);
+	if(create(to, OREAD, DMDIR|0777) < 0)
+		return -1;
+	fd = open(from, OREAD);
+	if(fd < 0)
+		return -1;
+	n = dirreadall(fd, &d);
+	close(fd);
+	ok = 0;
+	for(i = 0; i < n; i++){
+		sub = smprint("%s/%s", from, d[i].name);
+		subto = smprint("%s/%s", to, d[i].name);
+		if(sub && subto && dircopy(sub, subto) < 0)
+			ok = -1;
+		free(sub);
+		free(subto);
+	}
+	free(d);
+	return ok;
+}
+
+static int
+removeall(char *path)
+{
+	Dir *d;
+	char *sub;
+	int fd, n, i, rc;
+
+	fd = open(path, OREAD);
+	if(fd < 0)
+		return -1;
+	n = dirreadall(fd, &d);
+	close(fd);
+	if(n < 0)
+		return -1;
+	rc = 0;
+	for(i = 0; i < n; i++){
+		sub = smprint("%s/%s", path, d[i].name);
+		if(sub == nil)
+			continue;
+		if(d[i].mode & DMDIR)
+			removeall(sub);
+		if(remove(sub) < 0)
+			rc = -1;
+		free(sub);
+	}
+	free(d);
+	if(remove(path) < 0 && rc == 0)
+		rc = -1;
+	return rc;
+}
+
+static void
+originpath(char *dst, int nd)
+{
+	char *t;
+
+	t = trashdir();
+	snprint(dst, nd, "%s/.origin", t);
+}
+
+static void
+originrecord(char *base, char *origdir)
+{
+	char op[Maxpath];
+	int fd;
+
+	originpath(op, sizeof op);
+	fd = open(op, OWRITE);
+	if(fd < 0)
+		fd = create(op, OWRITE, 0666);
+	if(fd < 0)
+		return;
+	seek(fd, 0, 2);
+	fprint(fd, "%s\t%s\n", base, origdir);
+	close(fd);
+}
+
+static int
+originlookup(char *base, char *origdir, int nd)
+{
+	char op[Maxpath], buf[8192];
+	char *f[3];
+	int nf, found, fd, n, i, start;
+
+	originpath(op, sizeof op);
+	found = 0;
+	fd = open(op, OREAD);
+	if(fd < 0)
+		return 0;
+	n = read(fd, buf, sizeof(buf)-1);
+	close(fd);
+	if(n <= 0)
+		return 0;
+	buf[n] = 0;
+	start = 0;
+	for(i = 0; i <= n; i++){
+		if(i == n || buf[i] == '\n'){
+			if(i > start){
+				buf[i] = 0;
+				nf = getfields(buf+start, f, nelem(f), 0, "\t");
+				if(nf >= 2 && strcmp(f[0], base) == 0){
+					strecpy(origdir, origdir+nd, f[1]);
+					found = 1;
+					break;
+				}
+			}
+			start = i+1;
+		}
+	}
+	return found;
+}
+
+static void
+originremove(char *base)
+{
+	char op[Maxpath], buf[8192], out[8192];
+	char *f[3];
+	int nf, fd, n, i, start, o, len, save;
+
+	originpath(op, sizeof op);
+	fd = open(op, OREAD);
+	if(fd < 0)
+		return;
+	n = read(fd, buf, sizeof(buf)-1);
+	close(fd);
+	if(n <= 0)
+		return;
+	buf[n] = 0;
+	o = 0;
+	start = 0;
+	for(i = 0; i <= n; i++){
+		if(i != n && buf[i] != '\n')
+			continue;
+		if(i > start){
+			save = buf[i];
+			buf[i] = 0;
+			nf = getfields(buf+start, f, nelem(f), 0, "\t");
+			if(!(nf >= 1 && strcmp(f[0], base) == 0)){
+				len = i - start;
+				if(o + len + 1 < sizeof out){
+					memmove(out+o, buf+start, len);
+					o += len;
+					out[o++] = '\n';
+				}
+			}
+			buf[i] = save;
+		}
+		start = i+1;
+	}
+	fd = create(op, OWRITE, 0666);
+	if(fd >= 0){
+		write(fd, out, o);
+		close(fd);
+	}
+}
+
+static void
+deletetotrash(int i)
+{
+	char path[Maxpath], dest[Maxpath], base[136], *t;
+	int n, fd;
+
+	if(i < 0 || i >= nents || strcmp(ents[i].name, "..") == 0)
+		return;
+	cleanpath(path, sizeof path, cwd, ents[i].name);
+	t = trashdir();
+	fd = create(t, OREAD, DMDIR|0777);
+	if(fd >= 0)
+		close(fd);
+	strecpy(base, base+sizeof base, ents[i].name);
+	for(n = 0; n < 100; n++){
+		if(n == 0)
+			snprint(dest, sizeof dest, "%s/%s", t, base);
+		else
+			snprint(dest, sizeof dest, "%s/%s %d", t, base, n+1);
+		if(access(dest, AEXIST) < 0)
+			break;
+	}
+	if(dircopy(path, dest) == 0){
+		removeall(path);
+		originrecord(strrchr(dest, '/')+1, cwd);
+	}
+	loaddir(cwd);
+	redraw();
+}
+
+static void
+restorefromtrash(int i)
+{
+	char path[Maxpath], origdir[Maxpath], dest[Maxpath];
+
+	if(i < 0 || i >= nents || strcmp(ents[i].name, "..") == 0)
+		return;
+	cleanpath(path, sizeof path, cwd, ents[i].name);
+	if(!originlookup(ents[i].name, origdir, sizeof origdir))
+		strecpy(origdir, origdir+sizeof origdir, "/usr/glenda");
+	if(strcmp(origdir, "/") == 0)
+		snprint(dest, sizeof dest, "/%s", ents[i].name);
+	else
+		snprint(dest, sizeof dest, "%s/%s", origdir, ents[i].name);
+	if(dircopy(path, dest) == 0){
+		removeall(path);
+		originremove(ents[i].name);
+	}
+	loaddir(cwd);
+	redraw();
+}
+
+static void
+emptybin(void)
+{
+	Dir *d;
+	char *t, *sub;
+	int fd, n, i;
+
+	t = trashdir();
+	fd = open(t, OREAD);
+	if(fd < 0)
+		return;
+	n = dirreadall(fd, &d);
+	close(fd);
+	for(i = 0; i < n; i++){
+		sub = smprint("%s/%s", t, d[i].name);
+		if(sub == nil)
+			continue;
+		if(d[i].mode & DMDIR)
+			removeall(sub);
+		remove(sub);
+		free(sub);
+	}
+	free(d);
+	loaddir(cwd);
+	redraw();
+}
+
+static void
+newdir(void)
+{
+	char buf[Maxpath], name[64];
+
+	name[0] = 0;
+	if(!textprompt("New Folder", "Name:", name, sizeof name))
+		return;
+	if(name[0] == 0)
+		strecpy(name, name+sizeof name, "New Folder");
+	cleanpath(buf, sizeof buf, cwd, name);
+	if(create(buf, OREAD, DMDIR|0777) < 0){
+		char msg[Maxpath+64];
+		snprint(msg, sizeof msg, "Cannot create %s", buf);
+		textprompt("Error", msg, name, 0);
+	}
+	loaddir(cwd);
+	redraw();
+}
+
+static void
+renameentry(int i)
+{
+	char buf[Maxpath], name[128];
+	Dir *d;
+
+	if(i < 0 || i >= nents || strcmp(ents[i].name, "..") == 0)
+		return;
+	strecpy(name, name+sizeof name, ents[i].name);
+	if(!textprompt("Rename", "New name:", name, sizeof name))
+		return;
+	if(name[0] == 0 || strcmp(name, ents[i].name) == 0)
+		return;
+	cleanpath(buf, sizeof buf, cwd, ents[i].name);
+	d = dirstat(buf);
+	if(d == nil)
+		return;
+	strecpy(d->name, d->name+sizeof d->name, name);
+	if(dirwstat(buf, d) < 0){
+		free(d);
+		return;
+	}
+	free(d);
+	loaddir(cwd);
+	redraw();
+}
+
+static void
+pasteclip(void)
+{
+	char dest[Maxpath], *slash;
+
+	if(clipboard[0] == 0)
+		return;
+	slash = strrchr(clipboard, '/');
+	cleanpath(dest, sizeof dest, cwd, slash ? slash+1 : clipboard);
+	if(dircopy(clipboard, dest) == 0 && clipcut){
+		removeall(clipboard);
+		clipboard[0] = 0;
+	}
+	loaddir(cwd);
+	redraw();
+}
+
+/* ---- context menu ---- */
+
+static void
+contextmenu(Point p)
+{
+	char *bgitems[] = {"New Folder", "Paste", "-", "Refresh", "-", "Properties", nil};
+	char *ititems[] = {"Open", "Copy", "Cut", "Rename", "Delete", "-", "Properties", nil};
+	char *tritems[] = {"Restore", "-", "Empty Recycle Bin", nil};
+	char *cpitems[] = {"Open", nil};
+	char **items;
+	int i, m;
+
+	i = itemat(p);
+	if(controlpanel()){
+		if(i < 0)
+			return;
+		items = cpitems;
+	}else if(trashview()){
+		if(i < 0)
+			items = bgitems;	/* no paste etc: just refresh props */
+		else
+			items = tritems;
+	}else
+		items = i < 0 ? bgitems : ititems;
+
+	if(i >= 0 && !trashview() && !controlpanel()){
+		sel = i;
+		redraw();
+	}
+	m = menuhitx(p, items);
+	if(m < 0)
+		return;
+
+	if(items == cpitems){
+		if(m == 0 && i >= 0){
+			char path[Maxpath];
+			cleanpath(path, sizeof path, cwd, ents[i].name);
+			runentry(path);
+		}
+		return;
+	}
+	if(items == tritems){
+		if(m == 0)
+			restorefromtrash(i);
+		else if(m == 2)
+			emptybin();
+		return;
+	}
+	if(items == bgitems){
+		switch(m){
+		case 0:
+			newdir();
+			break;
+		case 1:
+			pasteclip();
+			break;
+		case 3:
+			loaddir(cwd);
+			redraw();
+			break;
+		case 5:
+			properties(i >= 0 ? i : -1);
+			break;
+		}
+		return;
+	}
+	/* item menu */
+	switch(m){
+	case 0:{
+		char path[Maxpath];
+		cleanpath(path, sizeof path, cwd, ents[i].name);
+		if(ents[i].isdir && loaddir(path) == 0)
+			navigate(path);
+		else if(!ents[i].isdir)
+			openfile(path);
+		break;
+	}
+	case 1:
+		cleanpath(clipboard, sizeof clipboard, cwd, ents[i].name);
+		clipcut = 0;
+		break;
+	case 2:
+		cleanpath(clipboard, sizeof clipboard, cwd, ents[i].name);
+		clipcut = 1;
+		break;
+	case 3:
+		renameentry(i);
+		break;
+	case 4:
+		deletetotrash(i);
+		break;
+	case 6:
+		properties(i);
+		break;
+	}
+}
+
 int
 toolbar(Point p)
 {
 	Rectangle r;
-	char path[Maxpath];
 
-	r = Rect(screen->r.min.x+82, screen->r.min.y+4,
-		screen->r.min.x+82+Btnw, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+6, screen->r.min.y+4,
+		screen->r.min.x+6+Btnw, screen->r.min.y+Toolbarh-4);
 	if(ptinrect(p, r)){
-		cleanpath(path, sizeof path, cwd, "..");
-		if(loaddir(path) == 0)
-			redraw();
+		goback();
 		return 1;
 	}
-	r = Rect(screen->r.min.x+158, screen->r.min.y+4,
-		screen->r.min.x+158+Btnw+12, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+80, screen->r.min.y+4,
+		screen->r.min.x+80+Btnw, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		goforward();
+		return 1;
+	}
+	r = Rect(screen->r.min.x+154, screen->r.min.y+4,
+		screen->r.min.x+154+Btnw, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		char path[Maxpath];
+		cleanpath(path, sizeof path, cwd, "..");
+		navigate(path);
+		return 1;
+	}
+	r = Rect(screen->r.min.x+228, screen->r.min.y+4,
+		screen->r.min.x+228+Btnw+12, screen->r.min.y+Toolbarh-4);
 	if(ptinrect(p, r)){
 		loaddir(cwd);
 		redraw();
 		return 1;
 	}
-	r = Rect(screen->r.min.x+352, screen->r.min.y+4,
-		screen->r.min.x+352+Btnw, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+322, screen->r.min.y+4,
+		screen->r.min.x+322+Btnw+18, screen->r.min.y+Toolbarh-4);
+	if(ptinrect(p, r)){
+		newdir();
+		return 1;
+	}
+	r = Rect(screen->r.min.x+412, screen->r.min.y+4,
+		screen->r.min.x+412+Btnw, screen->r.min.y+Toolbarh-4);
 	if(ptinrect(p, r)){
 		viewmode = viewmode == ViewList ? ViewIcon : ViewList;
 		redraw();
@@ -481,13 +1287,9 @@ toolbar(Point p)
 void
 openrow(Point p)
 {
-	Rectangle lr;
-	int i;
 	char path[Maxpath];
+	int i;
 
-	lr = listrect();
-	if(!ptinrect(p, lr))
-		return;
 	if(controlpanel()){
 		i = cpitemat(p);
 		if(i >= 0){
@@ -496,16 +1298,13 @@ openrow(Point p)
 		}
 		return;
 	}
-	if(viewmode == ViewIcon)
-		i = iconitemat(p);
-	else
-		i = scroll + (p.y - (lr.min.y+27))/Rowh;
+	i = itemat(p);
 	if(i < 0 || i >= nents)
 		return;
 	cleanpath(path, sizeof path, cwd, ents[i].name);
-	if(ents[i].isdir && loaddir(path) == 0)
-		redraw();
-	else if(!ents[i].isdir)
+	if(ents[i].isdir)
+		navigate(path);
+	else
 		openfile(path);
 }
 
@@ -516,10 +1315,9 @@ opentree(Point p)
 
 	for(i = 0; i < nelem(tree); i++)
 		if(ptinrect(p, tree[i].r)){
-			if(loaddir(tree[i].path) == 0){
-				selectedtree = i;
-				redraw();
-			}
+			if(tree[i].path[0] == 0)
+				strecpy(tree[i].path, tree[i].path+Maxpath, trashdir());
+			navigate(tree[i].path);
 			return 1;
 		}
 	return 0;
@@ -534,11 +1332,26 @@ eresized(int new)
 }
 
 void
+openrowatsel(void)
+{
+	char path[Maxpath];
+
+	if(sel < 0 || sel >= nents)
+		return;
+	cleanpath(path, sizeof path, cwd, ents[sel].name);
+	if(ents[sel].isdir)
+		navigate(path);
+	else
+		openfile(path);
+}
+
+void
 main(int argc, char **argv)
 {
 	Event e;
 	char path[Maxpath];
-	int buttons;
+	int buttons, i;
+	ulong now;
 
 	ARGBEGIN{
 	default:
@@ -559,17 +1372,48 @@ main(int argc, char **argv)
 	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
 	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
 	yellow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xF8D878FF);
+	navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000080FF);
 	einit(Emouse|Ekeyboard);
 	if(loaddir(path) < 0)
 		sysfatal("open %s: %r", path);
+	strecpy(hist[0], hist[0]+Maxpath, cwd);
+	nhist = 1;
+	hpos = 0;
 	redraw();
 	buttons = 0;
+	lastclick = 0;
+	lastsel = -1;
 	for(;;){
 		switch(event(&e)){
 		case Emouse:
-			if((e.mouse.buttons & 1) && !(buttons & 1))
-				if(!toolbar(e.mouse.xy) && !opentree(e.mouse.xy))
-					openrow(e.mouse.xy);
+			if((e.mouse.buttons & 1) && !(buttons & 1)){
+				if(toolbar(e.mouse.xy))
+					break;
+				if(opentree(e.mouse.xy))
+					break;
+				i = itemat(e.mouse.xy);
+				now = nsec()/1000000;
+				if(i >= 0){
+					if(i == lastsel && now - lastclick < 400){
+						openrow(e.mouse.xy);
+						lastsel = -1;
+						lastclick = 0;
+					}else{
+						sel = i;
+						redraw();
+						lastsel = i;
+						lastclick = now;
+					}
+				}else{
+					if(sel != -1){
+						sel = -1;
+						redraw();
+					}
+					lastsel = -1;
+				}
+			}
+			if((e.mouse.buttons & 4) && !(buttons & 4))
+				contextmenu(e.mouse.xy);
 			if((e.mouse.buttons & 8) && !(buttons & 8) && scroll > 0){
 				scroll--;
 				redraw();
@@ -585,6 +1429,10 @@ main(int argc, char **argv)
 				viewmode = viewmode == ViewList ? ViewIcon : ViewList;
 				redraw();
 			}
+			if(e.kbdc == '\n' && sel >= 0)
+				openrowatsel();
+			if(e.kbdc == 0x7f && sel >= 0 && !trashview() && !controlpanel())
+				deletetotrash(sel);
 			if(e.kbdc == 'q' || e.kbdc == Kdel)
 				exits(nil);
 			break;
