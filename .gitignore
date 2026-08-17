@@ -35,3 +35,13 @@ boot/q9/*.err
 boot/q9/test.log
 boot/q9/tty.log
 boot/q9/probe.ppm
+sys/src/9/pc/9pc
+sys/src/9/pc/*.out
+sys/src/9/pc/bootpc.c
+sys/src/9/pc/apbootstrap.h
+sys/src/9/pc/errstr.h
+sys/src/9/pc/init.h
+sys/src/9/pc/pc.c
+sys/src/9/pc/pc.root.s
+sys/src/9/pc/pc.rootc.c
+sys/src/9/pc/reboot.h
