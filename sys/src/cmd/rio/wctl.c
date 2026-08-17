@@ -13,6 +13,9 @@ enum
 {
 	Screenoffset,
 	Screenrefresh,
+	Theme,
+	Wallpaper,
+	Saver,
 	New,
 	Newtab,
 	Resize,
@@ -37,6 +40,9 @@ enum
 static char *cmds[] = {
 	[Screenoffset] = "screenoffset",
 	[Screenrefresh] = "refresh",
+	[Theme]	= "theme",
+	[Wallpaper]	= "wallpaper",
+	[Saver]	= "saver",
 	[New]	= "new",
 	[Newtab]	= "newtab",
 	[Resize]	= "resize",
@@ -292,7 +298,9 @@ parsewctl(char *s, Rectangle r)
 		cmd.r = rectonscreen(rectaddpt(r, screen->r.min));
 	while(isspacerune(*s))
 		s++;
-	if(cmd.cmd != New && cmd.cmd != Newtab && *s != '\0'){
+	if(cmd.cmd != New && cmd.cmd != Newtab &&
+	   cmd.cmd != Theme && cmd.cmd != Wallpaper && cmd.cmd != Saver &&
+	   *s != '\0'){
 		cmd.error = "extraneous text in wctl message";
 		return cmd;
 	}
@@ -440,6 +448,17 @@ writewctl(WinTab *w, char *data)
 		return nil;
 	case Screenrefresh:
 		refresh();
+		return nil;
+	case Theme:
+		if(!knowntheme(cmd.args))
+			return "unknown theme";
+		retheme(cmd.args);
+		return nil;
+	case Wallpaper:
+		setwallpaper(cmd.args);
+		return nil;
+	case Saver:
+		setsaver(atoi(cmd.args));
 		return nil;
 	case New:
 		w = wtcreateopts(cmd.r, cmd.hidden, cmd.scrolling, cmd.noborder, cmd.notitle);

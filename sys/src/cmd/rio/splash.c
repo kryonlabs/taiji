@@ -444,7 +444,7 @@ splashlogout(void)
 {
 	Logon lg;
 
-	inlogon = TRUE;
+	modalbegin();
 	killprocs();		/* end every window's command */
 	sleep(1200);		/* let windows clean themselves up */
 	logonbackdrop(screen->r);	/* hide any late restore they do */
@@ -455,10 +455,9 @@ splashlogout(void)
 	lgdim = getcolor(nil, 0x808080FF);
 	logon(&lg, screen->r);
 
-	inlogon = FALSE;
-	sendul(logonchan, 1);
-	sendul(logonchan, 1);
+	modalend();
 	draw(fakebg, fakebg->r, background, nil, ZP);
+	deskicondraw(fakebg);
 	paneldraw();
 	flushimage(display, 1);
 }

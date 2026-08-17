@@ -22,6 +22,73 @@ Channel *splashdone;
 Channel *logonchan;
 int inlogon;
 
+Channel *switchchan;	/* alt-tab events to the mouse thread */
+Channel *actchan;	/* UiReq actions to the mouse thread */
+ulong lastinput;	/* nsec-based ms of the last input event */
+int savermin;		/* screen saver timeout in minutes, 0 = off */
+int saveractive;
+
+static ulong
+nowms(void)
+{
+	return nsec()/1000000;
+}
+
+static void savercheck(void);
+
+static void
+readsaver(void)
+{
+	char *home, *path, buf[16];
+	int fd, n;
+
+	home = getenv("home");
+	if(home == nil)
+		return;
+	path = smprint("%s/lib/saver", home);
+	free(home);
+	if(path == nil)
+		return;
+	fd = open(path, OREAD);
+	if(fd >= 0){
+		n = read(fd, buf, sizeof(buf)-1);
+		if(n > 0){
+			buf[n] = 0;
+			savermin = atoi(buf);
+		}
+		close(fd);
+	}
+	free(path);
+}
+
+static void
+readwallpaper(void)
+{
+	char *home, *path, buf[64];
+	int fd, n;
+
+	home = getenv("home");
+	if(home == nil)
+		return;
+	path = smprint("%s/lib/wallpaper", home);
+	free(home);
+	if(path == nil)
+		return;
+	fd = open(path, OREAD);
+	if(fd >= 0){
+		n = read(fd, buf, sizeof(buf)-1);
+		if(n > 0){
+			buf[n] = 0;
+			while(n > 0 && (buf[n-1] == '\n' || buf[n-1] == ' '))
+				buf[--n] = 0;
+			if(buf[0] != 0)
+				setwallpaper(buf);
+		}
+		close(fd);
+	}
+	free(path);
+}
+
 void
 killprocs(void)
 {
@@ -830,6 +897,8 @@ btn13menu(void)
 void
 btn12menu(void)
 {
+	/* classic rio window menu; the win2k desktop menu took button 3 */
+	btn3menu();
 }
 
 static void
@@ -898,14 +967,20 @@ mthread(void*)
 {
 	Window *w;
 	Channel *wc;
+	UiReq req;
+	Timer *tick;
+	ulong ev;
 
 	threadsetname("mousethread");
 	recvul(splashdone);
-	enum { Amouse, Apick, NALT };
+	enum { Amouse, Apick, Atimer, Aswitch, Aact, NALT };
 
 	Alt alts[NALT+1] = {
 		[Amouse]	{.c = mctl->c, .v = &mctl->Mouse, .op = CHANRCV},
 		[Apick]		{.c = pickchan, .v = &wc, .op = CHANRCV},
+		[Atimer]	{.c = nil, .v = nil, .op = CHANNOP},
+		[Aswitch]	{.c = switchchan, .v = &ev, .op = CHANRCV},
+		[Aact]		{.c = actchan, .v = &req, .op = CHANRCV},
 		[NALT]		{.op = CHANEND},
 	};
 	for(;;){
@@ -915,11 +990,67 @@ mthread(void*)
 		Display *d = mctl->image->display;
 		if(d->bufp > d->buf)
 			flushimage(d, 1);
+		tick = timerstart(250);
+		alts[Atimer].c = tick->c;
+		alts[Atimer].op = CHANRCV;
 		switch(alt(alts)){
+		case Atimer:
+			paneltick();
+			savercheck();
+			break;
+		case Aswitch:
+			timercancel(tick);
+			switch(ev){
+			case 0:	switcheropen(); break;
+			case 1:	switchercycle(1); break;
+			case 2:	switchercycle(-1); break;
+			case 3:	switchercommit(); break;
+			case 4:	switchercancel(); break;
+			}
+			break;
+		case Aact:
+			timercancel(tick);
+			switch(req.op){
+			case UIclose:
+				if(req.w != nil)
+					wdelete(req.w);
+				paneldraw();
+				break;
+			case UIsysmenu:
+				if(req.w != nil)
+					winsysmenu(req.w, req.w->titlerect);
+				break;
+			case UIsecu:
+				secudlg();
+				break;
+			case UItaskmgr:
+				panellaunch("q9taskmgr");
+				break;
+			case UIwake:
+				if(saveractive){
+					saveractive = 0;
+					refresh();
+				}
+				break;
+			}
+			break;
 		case Apick:
+			timercancel(tick);
 			sendp(wc, pick());
 			break;
 		case Amouse:
+			timercancel(tick);
+			lastinput = nowms();
+			if(saveractive){
+				saveractive = 0;
+				refresh();
+				drainmouse(mctl, nil);
+				break;
+			}
+			if(switcheractive()){
+				switchercommit();
+				break;
+			}
 			if(panelmouse(mctl))
 				break;
 			w = wpointto(mctl->xy);
@@ -928,6 +1059,8 @@ again:
 			if(w == nil){
 				/* background */
 				setcursornormal(nil);
+				if(deskiconmouse(mctl))
+					break;
 				while(mctl->buttons & 1){
 					if(mctl->buttons & 2)
 						btn12menu();
@@ -936,7 +1069,7 @@ again:
 					readmouse(mctl);
 				}
 				if(mctl->buttons & 4)
-					btn3menu();
+					deskmenuactivate(mctl);
 			}else if(!ptinrect(mctl->xy, w->contrect)){
 				/* decoration */
 				if(!w->noborder &&
@@ -1017,6 +1150,7 @@ resthread(void*)
 		wscreen = allocscreen(screen, background, 0);
 		fakebg = allocwindow(wscreen, screen->r, Refbackup, DNofill);
 		draw(fakebg, fakebg->r, background, nil, ZP);
+		deskicondraw(fakebg);
 
 		delta = subpt(nr.min, or.min);
 		for(w = bottomwin; w; w = w->higher){
@@ -1033,12 +1167,70 @@ resthread(void*)
 	}
 }
 
+/*
+ * Screen saver, driven by the mouse thread's tick so no extra thread
+ * is needed: after savermin minutes without input, blank the screen
+ * and bounce the Plan 9 flag until something happens.
+ */
+static void
+savercheck(void)
+{
+	Image *navy, *blue, *red, *yel;
+	Rectangle r;
+	int x, y, dx, dy;
+	ulong now;
+
+	if(savermin <= 0 || saveractive || inlogon)
+		return;
+	now = nowms();
+	if(now < lastinput || now - lastinput < (ulong)savermin*60*1000)
+		return;
+
+	navy = getcolor(nil, 0x000080FF);
+	blue = getcolor(nil, 0x1084d0FF);
+	red = getcolor(nil, 0xB00000FF);
+	yel = getcolor(nil, 0xF0C000FF);
+	saveractive = 1;
+	draw(screen, screen->r, display->black, nil, ZP);
+	x = Dx(screen->r)/4;
+	y = Dy(screen->r)/4;
+	dx = 5;
+	dy = 3;
+	for(;;){
+		now = nowms();
+		if(now >= lastinput && now - lastinput < 500)
+			break;
+		r = Rect(x, y, x+64, y+64);
+		draw(screen, r, navy, nil, ZP);
+		draw(screen, Rect(x+34, y, x+64, y+32), blue, nil, ZP);
+		draw(screen, Rect(x, y+34, x+32, y+64), red, nil, ZP);
+		draw(screen, Rect(x+34, y+34, x+64, y+64), yel, nil, ZP);
+		flushimage(display, 1);
+		draw(screen, screen->r, display->black, nil, ZP);
+		x += dx;
+		y += dy;
+		if(x < 0 || x+64 > Dx(screen->r))
+			dx = -dx;
+		if(y < 0 || y+64 > Dy(screen->r))
+			dy = -dy;
+		sleep(40);
+		while(nbrecv(mctl->c, &mctl->Mouse) == 1){
+			lastinput = nowms();
+			break;
+		}
+	}
+	saveractive = 0;
+	refresh();
+	paneldraw();
+}
+
 void
 refresh(void)
 {
 	Window *w;
 
 	draw(fakebg, fakebg->r, background, nil, ZP);
+	deskicondraw(fakebg);
 	for(w = bottomwin; w; w = w->higher){
 		if(w->maximized){
 			wrestore(w);
@@ -1120,6 +1312,129 @@ winkey(char *s)
 	return 0;
 }
 
+/*
+ * Win2K system shortcuts, seen from the keyboard thread. Alt+Tab
+ * drives the task switcher via the mouse thread; Alt+F4 closes the
+ * focused window, Alt+Space opens its system menu, Ctrl+Alt+Del opens
+ * the security dialog and Ctrl+Shift+Esc the task manager. Raw
+ * /dev/kbd lines carry key-release info, so the switcher commits when
+ * Alt comes up; the console path has no releases and commits at once.
+ */
+static int
+syskeys(char *s)
+{
+	static int altdown;
+	UiReq req;
+	Rune r;
+	char *p;
+	int ctl, alt, sh;
+
+	memset(&req, 0, sizeof req);
+	if(*s == 'c'){
+		p = s+1;
+		while(*p){
+			p += chartorune(&r, p);
+			switch(r){
+			case Kalt:
+				altdown = 1;
+				break;
+			case '\t':
+				if(altdown){
+					altdown = 0;
+					sendul(switchchan, 0);
+					sendul(switchchan, 3);
+					free(s);
+					return 1;
+				}
+				break;
+			case ' ':
+				if(altdown){
+					altdown = 0;
+					req.op = UIsysmenu;
+					req.w = focused;
+					send(actchan, &req);
+					free(s);
+					return 1;
+				}
+				break;
+			case KF|4:
+				if(altdown){
+					altdown = 0;
+					req.op = UIclose;
+					req.w = focused;
+					send(actchan, &req);
+					free(s);
+					return 1;
+				}
+				break;
+			default:
+				altdown = 0;
+				break;
+			}
+		}
+		free(s);
+		return 0;
+	}
+	if(*s != 'k' && *s != 'K'){
+		free(s);
+		return 0;
+	}
+	alt = utfrune(s+1, Kalt) != nil;
+	ctl = utfrune(s+1, Kctl) != nil;
+	sh = utfrune(s+1, Kshift) != nil;
+	if(*s == 'k'){
+		if(alt)
+			altdown = 1;
+		if(altdown && utfrune(s+1, '\t') != nil){
+			sendul(switchchan, 0);
+			sendul(switchchan, sh ? 2 : 1);
+			free(s);
+			return 1;
+		}
+		if(alt && utfrune(s+1, ' ') != nil){
+			req.op = UIsysmenu;
+			req.w = focused;
+			send(actchan, &req);
+			free(s);
+			return 1;
+		}
+		if(alt && utfrune(s+1, KF|4) != nil){
+			req.op = UIclose;
+			req.w = focused;
+			send(actchan, &req);
+			free(s);
+			return 1;
+		}
+		if(ctl && alt && utfrune(s+1, Kdel) != nil){
+			req.op = UIsecu;
+			send(actchan, &req);
+			free(s);
+			return 1;
+		}
+		if(ctl && sh && utfrune(s+1, Kesc) != nil){
+			req.op = UItaskmgr;
+			send(actchan, &req);
+			free(s);
+			return 1;
+		}
+		if(switcheractive() && utfrune(s+1, Kesc) != nil){
+			sendul(switchchan, 4);
+			free(s);
+			return 1;
+		}
+	}else{
+		if(altdown && !alt){
+			altdown = 0;
+			if(switcheractive()){
+				sendul(switchchan, 3);
+				free(s);
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 void
 keyboardtap(void*)
 {
@@ -1156,11 +1471,14 @@ keyboardtap(void*)
 		switch(alt(alts)){
 		case Akbd:
 			/* from keyboard to tap or to window */
+			lastinput = nowms();
 			if(*s == 'k' || *s == 'K'){
 				shiftdown = utfrune(s+1, Kshift) != nil;
 				ctldown = utfrune(s+1, Kctl) != nil;
 			}
 			if(winkey(s))
+				break;
+			if(syskeys(s))
 				break;
 			prev = cur;
 			cur = focused ? focused->cur : nil;
@@ -1342,6 +1660,8 @@ threadmain(int argc, char *argv[])
 	closetap = chancreate(sizeof(Channel*), 0);
 
 	pickchan = chancreate(sizeof(Channel*), 0);
+	switchchan = chancreate(sizeof(ulong), 8);
+	actchan = chancreate(sizeof(UiReq), 8);
 
 	servekbd = kbctl->kbdfd >= 0;
 	snarffd = open("/dev/snarf", OREAD|OCEXEC);
@@ -1363,7 +1683,11 @@ threadmain(int argc, char *argv[])
 	threadcreate(keyboardtap, nil, mainstacksize);
 
 	recvul(splashdone);
+	deskiconinit();
+	readsaver();
+	readwallpaper();
 	draw(fakebg, fakebg->r, background, nil, ZP);
+	deskicondraw(fakebg);
 	paneldraw();
 	flushimage(display, 1);
 

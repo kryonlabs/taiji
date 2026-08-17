@@ -21,24 +21,6 @@ enum {
 };
 
 enum {
-	Iterm,
-	Ifolder,
-	Iacme,
-	Istats,
-	Ikbd,
-	Ictl,
-	Istart,
-	Iprog,
-	Idoc,
-	Ijot,
-	Irun,
-	Ishut,
-	Ioff,
-	Iclock,
-	Igame,
-};
-
-enum {
 	SubNone,
 	SubPrograms,
 	SubDocuments,
@@ -61,6 +43,7 @@ struct MenuItem {
 
 static MenuItem setitems[] = {
 	{ "Control Panel", "controlpanel", Ictl, 0, 0 },
+	{ "Task Manager", "q9taskmgr", Istats, 0, 0 },
 	{ "Keyboard", "q9kbsetup -reset", Ikbd, 0, 0 },
 };
 
@@ -111,8 +94,8 @@ panelinit(void)
 	panelreset();
 }
 
-static void
-drawicon(Rectangle r, int icon)
+void
+paneldrawicon(Rectangle r, int icon)
 {
 	int cx, cy;
 
@@ -212,6 +195,45 @@ drawicon(Rectangle r, int icon)
 		draw(screen, Rect(r.min.x+3, r.max.y-4, r.min.x+6, r.max.y-3), green, nil, ZP);
 		draw(screen, Rect(cx+2, r.min.y+9, cx+4, r.min.y+11), yellow, nil, ZP);
 		break;
+	case Ishow:
+		/* show desktop: a tiny window with an arrow to the tray */
+		draw(screen, insetrect(r, 1), display->white, nil, ZP);
+		border(screen, insetrect(r, 1), 1, darkshadow, ZP);
+		draw(screen, Rect(r.min.x+3, r.min.y+3, r.max.x-3, r.min.y+5), active, nil, ZP);
+		line(screen, Pt(r.min.x+2, r.min.y+9), Pt(r.max.x-3, r.min.y+9), 0, 0, 0, shadow, ZP);
+		line(screen, Pt(r.min.x+2, r.min.y+12), Pt(r.max.x-3, r.min.y+12), 0, 0, 0, shadow, ZP);
+		break;
+	case Ibin:
+		/* recycle bin */
+		line(screen, Pt(r.min.x+3, r.min.y+4), Pt(r.max.x-4, r.min.y+4), 0, 0, 1, darkshadow, ZP);
+		line(screen, Pt(r.min.x+2, r.min.y+5), Pt(r.min.x+5, r.max.y-3), 0, 0, 1, darkshadow, ZP);
+		line(screen, Pt(r.max.x-3, r.min.y+5), Pt(r.max.x-6, r.max.y-3), 0, 0, 1, darkshadow, ZP);
+		line(screen, Pt(r.min.x+5, r.max.y-3), Pt(r.max.x-6, r.max.y-3), 0, 0, 1, darkshadow, ZP);
+		draw(screen, Rect(r.min.x+4, r.min.y+6, r.min.x+6, r.max.y-4), shadow, nil, ZP);
+		draw(screen, Rect(r.max.x-7, r.min.y+6, r.max.x-5, r.max.y-4), shadow, nil, ZP);
+		draw(screen, Rect(cx-2, r.min.y+2, cx+3, r.min.y+4), darkshadow, nil, ZP);
+		break;
+	case Icomp:
+		/* my computer: a monitor */
+		draw(screen, Rect(r.min.x+1, r.min.y+2, r.max.x-1, r.min.y+12), hilite, nil, ZP);
+		border(screen, Rect(r.min.x+1, r.min.y+2, r.max.x-1, r.min.y+12), 1, darkshadow, ZP);
+		draw(screen, Rect(r.min.x+3, r.min.y+4, r.max.x-3, r.min.y+10), active, nil, ZP);
+		draw(screen, Rect(cx-2, r.min.y+12, cx+2, r.min.y+14), darkshadow, nil, ZP);
+		draw(screen, Rect(r.min.x+4, r.min.y+14, r.max.x-4, r.min.y+15), darkshadow, nil, ZP);
+		break;
+	case Ilock:
+		/* padlock */
+		ellipse(screen, Pt(cx, r.min.y+6), 4, 3, 1, darkshadow, ZP);
+		draw(screen, Rect(r.min.x+4, r.min.y+7, r.max.x-4, r.max.y-2), yellow, nil, ZP);
+		border(screen, Rect(r.min.x+4, r.min.y+7, r.max.x-4, r.max.y-2), 1, darkshadow, ZP);
+		draw(screen, Rect(cx-1, r.min.y+9, cx+1, r.min.y+12), darkshadow, nil, ZP);
+		break;
+	case Iuser:
+		ellipse(screen, Pt(cx, r.min.y+5), 3, 3, 1, hilite, ZP);
+		ellipse(screen, Pt(cx, r.min.y+5), 3, 3, 0, darkshadow, ZP);
+		draw(screen, Rect(r.min.x+4, r.min.y+9, r.max.x-4, r.max.y-2), hilite, nil, ZP);
+		border(screen, Rect(r.min.x+4, r.min.y+9, r.max.x-4, r.max.y-2), 1, darkshadow, ZP);
+		break;
 	default:
 		draw(screen, r, display->black, nil, ZP);
 		draw(screen, insetrect(r, 2), display->white, nil, ZP);
@@ -220,8 +242,8 @@ drawicon(Rectangle r, int icon)
 	}
 }
 
-static void
-button(Rectangle r, char *label, int icon, int down)
+void
+panelbutton(Rectangle r, char *label, int icon, int down)
 {
 	Rectangle ir;
 	int x;
@@ -238,7 +260,7 @@ button(Rectangle r, char *label, int icon, int down)
 	draw(screen, insetrect(r, 1), face, nil, ZP);
 	if(icon >= 0){
 		ir = Rect(r.min.x+4+down, r.min.y+3+down, r.min.x+4+IconSize+down, r.min.y+3+IconSize+down);
-		drawicon(ir, icon);
+		paneldrawicon(ir, icon);
 	}
 	if(label != nil){
 		x = r.min.x + 8;
@@ -308,8 +330,8 @@ deskdraw(void)
 	}
 }
 
-static void
-launch(char *cmd)
+void
+panellaunch(char *cmd)
 {
 	WinTab *t;
 	char *argv[4];
@@ -323,6 +345,9 @@ launch(char *cmd)
 	argv[2] = cmd;
 	argv[3] = nil;
 	wincmd(t, 0, nil, argv);
+	setcursoroverride(&query, TRUE);
+	sleep(400);
+	setcursoroverride(nil, FALSE);
 }
 
 int
@@ -379,14 +404,16 @@ paneldraw(void)
 	draw(screen, Rect(panelr.min.x, panelr.min.y+1, panelr.max.x, panelr.min.y+2),
 		shadow, nil, ZP);
 
-	button(Rect(panelr.min.x+3, panelr.min.y+3, panelr.min.x+StartWidth-4, panelr.max.y-3),
+	panelbutton(Rect(panelr.min.x+3, panelr.min.y+3, panelr.min.x+StartWidth-4, panelr.max.y-3),
 		"Start", Istart, 0);
 
 	br = Rect(panelr.min.x+StartWidth+4, panelr.min.y+3,
 		panelr.min.x+StartWidth+28, panelr.max.y-3);
-	button(br, nil, Ifolder, 0);
+	panelbutton(br, nil, Ifolder, 0);
 	br = rectaddpt(br, Pt(28, 0));
-	button(br, nil, Ictl, 0);
+	panelbutton(br, nil, Ictl, 0);
+	br = rectaddpt(br, Pt(28, 0));
+	panelbutton(br, nil, Ishow, 0);
 
 	i = 0;
 	for(w = bottomwin; w; w = w->higher){
@@ -395,7 +422,7 @@ paneldraw(void)
 		r = taskrect(i++);
 		if(r.min.x >= r.max.x)
 			break;
-		button(r, w->cur->label, -1, w == focused);
+		panelbutton(r, w->cur->label, -1, w == focused);
 	}
 
 	clockr = Rect(panelr.max.x-TrayWidth+4, panelr.min.y+4, panelr.max.x-4, panelr.max.y-4);
@@ -450,8 +477,8 @@ additem(MenuItem *items, int *n, char *label, char *cmd, int icon, int sub, int 
 	(*n)++;
 }
 
-static int
-iconbyname(char *name)
+int
+paneliconbyname(char *name)
 {
 	static struct { char *name; int icon; } tab[] = {
 		{ "term", Iterm },
@@ -468,6 +495,11 @@ iconbyname(char *name)
 		{ "off", Ioff },
 		{ "game", Igame },
 		{ "prog", Iprog },
+		{ "bin", Ibin },
+		{ "comp", Icomp },
+		{ "show", Ishow },
+		{ "lock", Ilock },
+		{ "user", Iuser },
 	};
 	int i;
 
@@ -509,7 +541,7 @@ readprogfile(char *path)
 		if(nf < 2 || f[0][0] == 0 || f[1][0] == 0)
 			continue;
 		additem(sitems, &nsitems, f[0], f[1],
-			nf > 2 && f[2][0] != 0 ? iconbyname(f[2]) : Ifolder,
+			nf > 2 && f[2][0] != 0 ? paneliconbyname(f[2]) : Ifolder,
 			SubNone, 0);
 	}
 	Bterm(bp);
@@ -589,7 +621,7 @@ buildmain(void)
 	additem(mitems, &nmitems, "Documents", nil, Idoc, SubDocuments, 0);
 	additem(mitems, &nmitems, nil, nil, -1, SubNone, Msep);
 	additem(mitems, &nmitems, "Settings", nil, Ictl, SubSettings, 0);
-	additem(mitems, &nmitems, "Run...", "q9run", Irun, SubNone, 0);
+	additem(mitems, &nmitems, "Run...", "rundlg", Irun, SubNone, 0);
 	additem(mitems, &nmitems, nil, nil, -1, SubNone, Msep);
 	additem(mitems, &nmitems, "Log Out", "logout", Ioff, SubNone, 0);
 	additem(mitems, &nmitems, "Shut Down", "shutdlg", Ishut, SubNone, 0);
@@ -705,7 +737,7 @@ drawmenuitem(int i, int hover)
 	}
 	hover = hover && !(mitems[i].flags & Mdisable);
 	draw(screen, r, hover ? active : menuback, nil, ZP);
-	drawicon(Rect(r.min.x+4, r.min.y+(MenuItemHeight-IconSize)/2,
+	paneldrawicon(Rect(r.min.x+4, r.min.y+(MenuItemHeight-IconSize)/2,
 		r.min.x+4+IconSize, r.min.y+(MenuItemHeight-IconSize)/2+IconSize),
 		mitems[i].icon);
 	txt = display->black;
@@ -737,7 +769,7 @@ drawsubmenuitem(int i, int hover)
 	}
 	hover = hover && !(sitems[i].flags & Mdisable);
 	draw(screen, r, hover ? active : menuback, nil, ZP);
-	drawicon(Rect(r.min.x+4, r.min.y+(MenuItemHeight-IconSize)/2,
+	paneldrawicon(Rect(r.min.x+4, r.min.y+(MenuItemHeight-IconSize)/2,
 		r.min.x+4+IconSize, r.min.y+(MenuItemHeight-IconSize)/2+IconSize),
 		sitems[i].icon);
 	txt = display->black;
@@ -852,7 +884,7 @@ menuactivate(void)
 		cmd = sitems[submenusel].cmd;
 		if(cmd != nil && !(sitems[submenusel].flags & Mdisable)){
 			menuhide();	/* clears the selection; keep cmd first */
-			launch(cmd);
+			panellaunch(cmd);
 		}
 		return;
 	}
@@ -863,8 +895,10 @@ menuactivate(void)
 			panelshutdlg();
 		else if(strcmp(cmd, "logout") == 0)
 			splashlogout();
+		else if(strcmp(cmd, "rundlg") == 0)
+			rundlg();
 		else
-			launch(cmd);
+			panellaunch(cmd);
 	}
 }
 
@@ -962,6 +996,7 @@ panelcontextmenu(Mousectl *mc)
 int
 panelmouse(Mousectl *mc)
 {
+	static ulong clkclick;
 	Rectangle r;
 	Window *w;
 	int i;
@@ -985,22 +1020,38 @@ panelmouse(Mousectl *mc)
 		r = Rect(panelr.min.x+StartWidth+4, panelr.min.y+3,
 			panelr.min.x+StartWidth+28, panelr.max.y-3);
 		if(ptinrect(mc->xy, r)){
-			launch("explorer /");
+			panellaunch("explorer /");
 			drainmouse(mc, nil);
 			paneldraw();
 			return 1;
 		}
 		r = rectaddpt(r, Pt(28, 0));
 		if(ptinrect(mc->xy, r)){
-			launch("controlpanel");
+			panellaunch("controlpanel");
+			drainmouse(mc, nil);
+			paneldraw();
+			return 1;
+		}
+		r = rectaddpt(r, Pt(28, 0));
+		if(ptinrect(mc->xy, r)){
+			/* show desktop: minimize everything */
+			for(w = bottomwin; w; w = w->higher)
+				if(!w->hidden)
+					whide(w);
 			drainmouse(mc, nil);
 			paneldraw();
 			return 1;
 		}
 		if(ptinrect(mc->xy, clockr)){
-			launch("clock");
+			/* single click shows the date tooltip; double opens the calendar */
+			if(clkclick > 0 && mc->msec - clkclick < 450){
+				drainmouse(mc, nil);
+				paneldraw();
+				calendardlg();
+				clkclick = 0;
+			}else
+				clkclick = mc->msec;
 			drainmouse(mc, nil);
-			paneldraw();
 			return 1;
 		}
 		i = deskitemat(mc->xy);
@@ -1026,8 +1077,21 @@ panelmouse(Mousectl *mc)
 			}
 		}
 	}
-	if(mc->buttons & 4)
+	if(mc->buttons & 4){
+		i = 0;
+		for(w = bottomwin; w; w = w->higher){
+			if(w->cur == nil)
+				continue;
+			r = taskrect(i++);
+			if(ptinrect(mc->xy, r) && r.min.x < r.max.x){
+				drainmouse(mc, nil);
+				winsysmenu(w, r);
+				paneldraw();
+				return 1;
+			}
+		}
 		panelcontextmenu(mc);
+	}
 	drainmouse(mc, nil);
 	paneldraw();
 	return 1;
@@ -1116,8 +1180,8 @@ Redraw:
 		string(screen, Pt(r.min.x+14, r.min.y+(Dy(r)-font->height)/2),
 			display->black, ZP, font, shutopts[i]);
 	}
-	button(ok, "OK", -1, 0);
-	button(cancel, "Cancel", -1, 0);
+	panelbutton(ok, "OK", -1, 0);
+	panelbutton(cancel, "Cancel", -1, 0);
 	flushimage(display, 1);
 
 	while(!done){
@@ -1146,8 +1210,12 @@ Redraw:
 		freeimage(backup);
 		flushimage(display, 1);
 	}
-	if(!done)
-		shutreboot();
+	if(!done){
+		if(sel == ShutLogoff)
+			splashlogout();
+		else
+			shutreboot();
+	}
 }
 
 int
@@ -1265,4 +1333,174 @@ menumouse(Mousectl *mc)
 		return 1;
 	}
 	return 1;
+}
+
+/* ---- task rect for minimize animation ---- */
+
+Rectangle
+paneltaskrect(Window *w)
+{
+	Window *t;
+	int i;
+
+	i = 0;
+	for(t = bottomwin; t; t = t->higher){
+		if(t->cur == nil)
+			continue;
+		if(t == w)
+			return taskrect(i);
+		i++;
+	}
+	return Rect(panelr.min.x, panelr.min.y-24, panelr.min.x+80, panelr.min.y-6);
+}
+
+/* ---- clock tick and tooltips (driven by the mouse thread timer) ---- */
+
+static char *wdayname[] = {
+	"Sunday", "Monday", "Tuesday", "Wednesday",
+	"Thursday", "Friday", "Saturday"
+};
+static char *monname[] = {
+	"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"
+};
+
+static char lastclock[8];
+static Point hoverpt = { -1, -1 };
+static ulong hovermsec;
+static char tiptext[128];
+static Rectangle tipr;
+static Image *tipbackup;
+
+static void
+tiphide(void)
+{
+	if(tipbackup){
+		draw(screen, tipr, tipbackup, nil, tipr.min);
+		freeimage(tipbackup);
+		tipbackup = nil;
+		flushimage(display, 1);
+	}
+	tiptext[0] = 0;
+}
+
+static int
+tipinfo(char *dst, int nd)
+{
+	Rectangle r;
+	Window *w;
+	Tm *tm;
+	int i, cur;
+
+	if(edge == PanelOff || !ptinrect(mctl->xy, panelr))
+		return 0;
+
+	r = Rect(panelr.min.x+3, panelr.min.y+3, panelr.min.x+StartWidth-4, panelr.max.y-3);
+	if(ptinrect(mctl->xy, r)){
+		strecpy(dst, dst+nd, "Click here to begin");
+		return 1;
+	}
+	r = Rect(panelr.min.x+StartWidth+4, panelr.min.y+3,
+		panelr.min.x+StartWidth+28, panelr.max.y-3);
+	if(ptinrect(mctl->xy, r)){
+		strecpy(dst, dst+nd, "My Computer");
+		return 1;
+	}
+	r = rectaddpt(r, Pt(28, 0));
+	if(ptinrect(mctl->xy, r)){
+		strecpy(dst, dst+nd, "Control Panel");
+		return 1;
+	}
+	r = rectaddpt(r, Pt(28, 0));
+	if(ptinrect(mctl->xy, r)){
+		strecpy(dst, dst+nd, "Show Desktop");
+		return 1;
+	}
+	if(ptinrect(mctl->xy, clockr)){
+		tm = localtime(time(0));
+		snprint(dst, nd, "%s, %s %d, %d",
+			wdayname[tm->wday], monname[tm->mon], tm->mday, tm->year+1900);
+		return 1;
+	}
+	if(ptinrect(mctl->xy, deskr)){
+		cur = screenoff.x/Dx(screen->r) + ndeskx*(screenoff.y/Dy(screen->r));
+		snprint(dst, nd, "Desktop %d", cur+1);
+		return 1;
+	}
+	i = 0;
+	for(w = bottomwin; w; w = w->higher){
+		if(w->cur == nil)
+			continue;
+		r = taskrect(i++);
+		if(ptinrect(mctl->xy, r) && r.min.x < r.max.x){
+			strecpy(dst, dst+nd, w->cur->label);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void
+paneltick(void)
+{
+	Tm *tm;
+	char clock[8];
+	char tip[128];
+	Image *back;
+	int w, h;
+
+	if(edge == PanelOff || screen == nil || Dx(screen->r) <= 0 || inlogon)
+		return;
+
+	tm = localtime(time(0));
+	snprint(clock, sizeof clock, "%02d:%02d", tm->hour, tm->min);
+	if(strcmp(clock, lastclock) != 0){
+		strcpy(lastclock, clock);
+		if(!menuopen)
+			paneldraw();
+	}
+
+	/* tooltips: show after the pointer rests on an element for a while */
+	if(menuopen || mctl->buttons != 0){
+		hoverpt = Pt(-1, -1);
+		tiphide();
+		return;
+	}
+	if(!tipinfo(tip, sizeof tip)){
+		hoverpt = Pt(-1, -1);
+		hovermsec = 0;
+		tiphide();
+		return;
+	}
+	if(tiptext[0] != 0){
+		if(strcmp(tip, tiptext) != 0 || !eqpt(mctl->xy, hoverpt))
+			tiphide();
+		else
+			return;
+	}
+	if(eqpt(mctl->xy, hoverpt)){
+		if(hovermsec != 0 && mctl->msec > hovermsec && mctl->msec - hovermsec >= 500){
+			w = stringwidth(font, tip) + 10;
+			h = font->height + 6;
+			tipr = Rect(mctl->xy.x+4, panelr.min.y - h - 3, mctl->xy.x+4+w, panelr.min.y - 3);
+			if(tipr.max.x > screen->r.max.x)
+				tipr = rectaddpt(tipr, Pt(screen->r.max.x - tipr.max.x, 0));
+			if(tipr.min.x < screen->r.min.x)
+				tipr = rectaddpt(tipr, Pt(screen->r.min.x - tipr.min.x, 0));
+			back = getcolor(nil, 0xFFFFE1FF);
+			tipbackup = allocimage(display, tipr, screen->chan, 0, -1);
+			if(tipbackup == nil)
+				return;
+			draw(tipbackup, tipr, screen, nil, tipr.min);
+			draw(screen, tipr, back, nil, ZP);
+			border(screen, tipr, 1, display->black, ZP);
+			string(screen, Pt(tipr.min.x+5, tipr.min.y+(h-font->height)/2),
+				display->black, ZP, font, tip);
+			flushimage(display, 1);
+			strecpy(tiptext, tiptext+sizeof tiptext, tip);
+		}
+	}else{
+		hoverpt = mctl->xy;
+		hovermsec = mctl->msec;
+	}
 }

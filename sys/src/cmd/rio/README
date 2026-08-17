@@ -33,6 +33,21 @@ After that had been more or less achieved some new features were implemented:
 		click new window or background
 	- 'newtab' wctl message
 	- 'new -id n' attach name
+- win2k shell extras
+	- desktop icons from /lib/q9/desktop and $home/lib/desktop
+	  (label<TAB>command[<TAB>icon]); single click selects,
+	  double click launches; button 3 on the desktop opens the
+	  win2k context menu (the classic rio menu is on the 1-2 chord)
+	- Start menu Programs/Documents lists from /lib/q9/programs
+	  and $home/lib/recent
+	- Run dialog with history ($home/lib/runhist)
+	- Alt+Tab task switcher, Alt+F4 close, Alt+Space window menu,
+	  Ctrl+Alt+Del security dialog (lock/logoff/shutdown/task
+	  manager), Ctrl+Shift+Esc task manager
+	- taskbar: button 3 on a task button opens the window system
+	  menu, tooltips, ticking clock, double click opens a calendar
+	- wctl "theme NAME", "wallpaper NAME", "saver MINUTES"
+	- screen saver: bouncing flag after the idle timeout
 - misc
 	- 1-3 chord on desktop opens secondary menu
 

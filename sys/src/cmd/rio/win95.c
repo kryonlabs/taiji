@@ -17,6 +17,37 @@ enum {
 static Image *wincolors[NumWinColors];
 static Image *btnmasks[4];
 static Image *appicon;
+static Image *tgradact;	/* win2k gradient title strips (1 x N, tiled) */
+static Image *tgradinact;
+
+static ulong
+glerp(ulong c0, ulong c1, int i, int n)
+{
+	int r, g, b;
+
+	r = ((c0>>24 & 0xFF)*(n-i) + (c1>>24 & 0xFF)*i) / n;
+	g = ((c0>>16 & 0xFF)*(n-i) + (c1>>16 & 0xFF)*i) / n;
+	b = ((c0>>8 & 0xFF)*(n-i) + (c0>>8 & 0xFF)*i) / n;
+	return r<<24 | g<<16 | b<<8 | 0xFF;
+}
+
+static void
+buildgradients(void)
+{
+	int i, h;
+
+	h = titlesz;
+	tgradact = allocimage(display, Rect(0,0,1,h), screen->chan, 1, 0x0A246AFF);
+	tgradinact = allocimage(display, Rect(0,0,1,h), screen->chan, 1, 0x808080FF);
+	if(tgradact == nil || tgradinact == nil)
+		return;
+	for(i = 0; i < h; i++){
+		draw(tgradact, Rect(0,i,1,i+1),
+			getcolor(nil, glerp(0x0A246AFF, 0xA6CAF0FF, i, h-1)), nil, ZP);
+		draw(tgradinact, Rect(0,i,1,i+1),
+			getcolor(nil, glerp(0x7B7B7BFF, 0xB8B8B8FF, i, h-1)), nil, ZP);
+	}
+}
 
 static void
 winbtn(Image *img, Rectangle r, Image *mask, int down)
@@ -85,7 +116,10 @@ win95wdecor(Window *w)
 	if(!w->notitle){
 		r = w->titlerect;
 		r.max.y -= 1;
-		draw(w->frame, r, wincolors[ColTitle + inact], nil, ZP);
+		if(titlegradient && tgradact != nil)
+			draw(w->frame, r, inact ? tgradinact : tgradact, nil, ZP);
+		else
+			draw(w->frame, r, wincolors[ColTitle + inact], nil, ZP);
 		draw(w->frame, Rect(r.min.x,r.max.y,r.max.x,r.max.y+1), wincolors[ColDefault], nil, ZP);
 
 		// draw buttons
@@ -275,4 +309,5 @@ win95inittheme(void)
 	btnmasks[2] = mkiconmask(rstbtn, 16, 14);
 	btnmasks[3] = mkiconmask(closebtn, 16, 14);
 	appicon = mkicon(appbtn, 16, 16);
+	buildgradients();
 }

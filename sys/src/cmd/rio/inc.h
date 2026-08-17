@@ -349,6 +349,7 @@ void borderBR(Image *img, Rectangle r, Image *c);
 void winborder(Image *img, Rectangle r, Image *c1, Image *c2);
 
 void refresh(void);
+void sweep(Window *w);
 Point dmenuhit(int but, Mousectl *mc, int nx, int ny, Point last);
 void drainmouse(Mousectl *mc, WinTab *w);
 Window *pick(void);
@@ -375,6 +376,89 @@ int panelmouse(Mousectl *mc);
 int panelenabled(void);
 void panelsetedge(char *s);
 Rectangle panelworkrect(void);
+
+/* panel icon ids (panel.c drawicon) */
+enum {
+	Iterm,
+	Ifolder,
+	Iacme,
+	Istats,
+	Ikbd,
+	Ictl,
+	Istart,
+	Iprog,
+	Idoc,
+	Ijot,
+	Irun,
+	Ishut,
+	Ioff,
+	Iclock,
+	Igame,
+	/* win2k shell extras */
+	Ishow = 100,
+	Ibin,
+	Icomp,
+	Ilock,
+	Iuser,
+};
+
+/* win2k shell extras: buttons, task rects (panel.c) */
+void panelbutton(Rectangle r, char *label, int icon, int down);
+void paneldrawicon(Rectangle r, int icon);
+int paneliconbyname(char *name);
+void panellaunch(char *cmd);
+Rectangle paneltaskrect(Window *w);
+void paneltick(void);
+
+/* dialog.c: generic win2k widgets and modal dialogs */
+void modalbegin(void);
+void modalend(void);
+int winmenuhit(Mousectl *mc, Rectangle anchor, char **items, int n, int defsel);
+int wintextdlg(char *title, char *prompt, char *buf, int nbuf);
+void rundlg(void);
+void calendardlg(void);
+void secudlg(void);
+void lockscreen(void);
+void winsysmenu(Window *w, Rectangle anchor);
+void animminimize(Window *w);
+void switcheropen(void);
+void switchercycle(int dir);
+void switchercommit(void);
+void switchercancel(void);
+int switcheractive(void);
+
+/* deskicon.c: desktop icons and desktop context menu */
+void deskiconinit(void);
+void deskicondraw(Image *dst);
+void deskiconredraw(void);
+int deskiconmouse(Mousectl *mc);
+void deskmenuactivate(Mousectl *mc);
+
+/* main.c: cross-thread UI requests from the keyboard thread */
+enum {
+	UIclose,
+	UIsysmenu,
+	UIsecu,
+	UItaskmgr,
+	UIwake,
+};
+typedef struct UiReq UiReq;
+struct UiReq {
+	int op;
+	Window *w;
+};
+extern Channel *switchchan;
+extern Channel *actchan;
+extern ulong lastinput;
+extern int savermin;
+extern int saveractive;
+
+/* theme.c */
+extern int titlegradient;
+int knowntheme(char *name);
+void retheme(char *name);
+void setwallpaper(char *name);
+void setsaver(int minutes);
 
 void inittheme(void);
 void settheme(char *name);
