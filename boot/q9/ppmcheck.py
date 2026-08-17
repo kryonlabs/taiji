@@ -76,6 +76,44 @@ def main():
         r, g, b = pix(x, y)
         grey = abs(r-g) < 12 and abs(g-b) < 12 and r > 140
         sys.exit(0 if (grey == (check == "grey_at")) else 1)
+    if check == "deskicon_at":
+        # desktop icons top-left: many pixels differ from teal wallpaper
+        n = 0
+        for y in range(6, 110, 2):
+            for x in range(10, 100, 2):
+                r, g, b = pix(x, y)
+                if abs(r-0) > 40 or abs(g-128) > 40 or abs(b-128) > 40:
+                    n += 1
+        sys.exit(0 if n > 120 else 1)
+    if check == "submenu_at":
+        # start menu programs submenu: white item text on gray face
+        x1, y1, x2, y2 = map(int, sys.argv[3:7])
+        nw = ng = 0
+        for y in range(y1, y2, 2):
+            for x in range(x1, x2, 2):
+                r, g, b = pix(x, y)
+                if r > 200 and g > 200 and b > 200:
+                    nw += 1
+                if abs(r-192) < 20 and abs(g-192) < 20 and abs(b-192) < 20:
+                    ng += 1
+        sys.exit(0 if nw > 15 and ng > 200 else 1)
+    if check == "rundlg_at":
+        # Run dialog: navy title strip, gray face, white entry field
+        r1, g1, b1 = pix(500, 310)
+        r2, g2, b2 = pix(450, 345)
+        r3, g3, b3 = pix(400, 400)
+        navy = r1 < 40 and g1 < 40 and 100 <= b1 <= 180
+        grey = abs(r2-g2) < 12 and abs(g2-b2) < 12 and r2 > 140
+        white = r3 > 220 and g3 > 220 and b3 > 220
+        sys.exit(0 if navy and grey and white else 1)
+    if check == "white_at":
+        x, y = int(sys.argv[3]), int(sys.argv[4])
+        r, g, b = pix(x, y)
+        sys.exit(0 if r > 220 and g > 220 and b > 220 else 1)
+    if check == "navy_at":
+        x, y = int(sys.argv[3]), int(sys.argv[4])
+        r, g, b = pix(x, y)
+        sys.exit(0 if r < 40 and g < 40 and 100 <= b <= 180 else 1)
     if check == "region_white":
         x1, y1, x2, y2 = map(int, sys.argv[3:7])
         for y in range(y1, y2, 2):

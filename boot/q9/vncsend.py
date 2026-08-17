@@ -15,6 +15,7 @@ def recvn(s, n):
 names = {
     "ret": 0xff0d, "spc": 0x20, "bks": 0xff08, "tab": 0xff09,
     "esc": 0xff1b, "del": 0xffff, "enter": 0xff0d, "bs": 0xff08,
+    "ctrl": 0xffe3, "shift": 0xffe1, "alt": 0xffe9, "win": 0xffeb,
 }
 
 s = socket.create_connection(("127.0.0.1", int(__import__("os").environ.get("Q9_VNC_PORT", "5901"))), timeout=5)
@@ -39,14 +40,24 @@ def key(kc, down):
     s.sendall(bytes([4, down, kc >> 24, kc >> 16 & 0xFF, kc >> 8 & 0xFF, kc & 0xFF]))
 
 for arg in sys.argv[1:]:
+    down, up = 1, 1
+    if arg.startswith("+"):
+        arg, down = arg[1:], 1
+        up = 0
+    elif arg.startswith("-"):
+        arg, down = arg[1:], 0
+        up = 1
     if arg in names:
         kc = names[arg]
     elif len(arg) == 1:
         kc = ord(arg)
     else:
         continue
-    key(kc, 1)
-    time.sleep(0.15)
-    key(kc, 0)
+    if down:
+        key(kc, 1)
+        time.sleep(0.15)
+    if up:
+        key(kc, 0)
+        time.sleep(0.1)
     time.sleep(0.15)
 s.close()

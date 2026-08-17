@@ -120,6 +120,67 @@ else
 	bad "start menu opens with items"
 fi
 
+echo "== boot 1: desktop icons =="
+fastshot dicons
+sleep 1
+if check $T/dicons.ppm deskicon_at; then
+	ok "desktop icons render"
+else
+	bad "desktop icons render"
+fi
+
+echo "== boot 1: programs submenu populated =="
+monmove 100 585
+sleep 1
+fastshot subm
+sleep 1
+if check $T/subm.ppm submenu_at 210 520 385 760; then
+	ok "programs submenu lists programs"
+else
+	bad "programs submenu lists programs"
+fi
+
+echo "== boot 1: run dialog =="
+monclick 100 666
+sleep 1
+fastshot rund
+sleep 1
+if check $T/rund.ppm rundlg_at; then
+	ok "run dialog opens with entry field"
+else
+	bad "run dialog opens with entry field"
+fi
+python3 $T/vncsend.py esc
+sleep 1
+
+echo "== boot 1: ctrl+shift+esc task manager =="
+python3 $T/vncsend.py +ctrl +shift esc -shift -ctrl
+sleep 4
+fastshot tmg
+sleep 1
+if check $T/tmg.ppm white_at 100 150; then
+	ok "task manager window appears"
+else
+	bad "task manager window appears"
+fi
+monclick 150 200
+sleep 1
+python3 $T/vncsend.py q
+sleep 2
+
+echo "== boot 1: desktop context menu =="
+monrclick 700 300
+sleep 1
+fastshot dmenu
+sleep 1
+if check $T/dmenu.ppm grey_at 720 330; then
+	ok "desktop context menu opens"
+else
+	bad "desktop context menu opens"
+fi
+monclick 900 200
+sleep 1
+
 echo "== boot 2: safe mode disables panel =="
 boot_vm
 if wait_menu; then
@@ -137,6 +198,6 @@ else
 fi
 
 pkill -f '^qemu-system-x86_64' 2>/dev/null || true
-rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm $T/bar.ok
+rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm $T/bar.ok $T/dicons.ppm $T/subm.ppm $T/rund.ppm $T/tmg.ppm $T/dmenu.ppm
 echo "== results: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]

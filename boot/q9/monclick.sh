@@ -26,3 +26,45 @@ monclick() {
 	} | socat - UNIX-CONNECT:$T/monitor.sock >/dev/null 2>&1
 	sleep 0.4
 }
+
+# move without clicking (hover), same homing strategy
+monmove() {
+	_x=$1 _y=$2
+	{
+		for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+			printf 'mouse_move -127 -127\n'
+			sleep 0.05
+		done
+		while [ $_x -gt 127 ]; do
+			printf 'mouse_move 127 0\n'; _x=$((_x-127)); sleep 0.05
+		done
+		while [ $_y -gt 127 ]; do
+			printf 'mouse_move 0 127\n'; _y=$((_y-127)); sleep 0.05
+		done
+		printf 'mouse_move %d %d\n' "$_x" "$_y"
+	} | socat - UNIX-CONNECT:$T/monitor.sock >/dev/null 2>&1
+	sleep 0.4
+}
+
+# right click at position
+monrclick() {
+	_x=$1 _y=$2
+	{
+		for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+			printf 'mouse_move -127 -127\n'
+			sleep 0.05
+		done
+		while [ $_x -gt 127 ]; do
+			printf 'mouse_move 127 0\n'; _x=$((_x-127)); sleep 0.05
+		done
+		while [ $_y -gt 127 ]; do
+			printf 'mouse_move 0 127\n'; _y=$((_y-127)); sleep 0.05
+		done
+		printf 'mouse_move %d %d\n' "$_x" "$_y"
+		sleep 0.3
+		printf 'mouse_button 4\n'
+		sleep 0.6
+		printf 'mouse_button 0\n'
+	} | socat - UNIX-CONNECT:$T/monitor.sock >/dev/null 2>&1
+	sleep 0.4
+}
