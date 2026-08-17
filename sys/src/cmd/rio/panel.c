@@ -315,8 +315,9 @@ launch(char *cmd)
 	char *argv[4];
 
 	t = wtcreate(newrect(), FALSE, scrolling);
-	if(t == nil)
+	if(t == nil){
 		return;
+	}
 	argv[0] = "rc";
 	argv[1] = "-c";
 	argv[2] = cmd;
@@ -845,16 +846,20 @@ menuhide(void)
 static void
 menuactivate(void)
 {
+	char *cmd;
+
 	if(submenuopen && submenusel >= 0){
-		if(sitems[submenusel].cmd != nil && !(sitems[submenusel].flags & Mdisable)){
-			menuhide();
-			launch(sitems[submenusel].cmd);
+		cmd = sitems[submenusel].cmd;
+		if(cmd != nil && !(sitems[submenusel].flags & Mdisable)){
+			menuhide();	/* clears the selection; keep cmd first */
+			launch(cmd);
 		}
 		return;
 	}
-	if(menusel >= 0 && mitems[menusel].cmd != nil && !(mitems[menusel].flags & Mdisable)){
-		menuhide();
-		launch(mitems[menusel].cmd);
+	cmd = menusel >= 0 ? mitems[menusel].cmd : nil;
+	if(cmd != nil && !(mitems[menusel].flags & Mdisable)){
+		menuhide();	/* clears the selection; keep cmd first */
+		launch(cmd);
 	}
 }
 
@@ -1027,6 +1032,19 @@ int
 panelmenuopen(void)
 {
 	return menuopen;
+}
+
+void
+panelwinkey(void)
+{
+	if(!panelenabled())
+		return;
+	if(menuopen)
+		menuhide();
+	else{
+		paneldraw();
+		menushow();
+	}
 }
 
 void

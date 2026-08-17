@@ -1057,6 +1057,43 @@ Channel *closetap;	/* close fromtap or totap */
 Channel *fromtap;	/* input from kbd tap program to window */
 Channel *totap;		/* our keyboard input to tap program */
 
+/*
+ * Returns TRUE when the keyboard event carries the win key; the event
+ * is then consumed (not forwarded to windows) and the start menu is
+ * toggled on key down. Handles both raw /dev/kbd k/K lines and the
+ * console path's c<C> strings.
+ */
+static int
+winkey(char *s)
+{
+	static int down;
+	Rune r;
+
+	if(*s == 'c'){
+		s++;
+		while(*s){
+			s += chartorune(&r, s);
+			if(r == Kwin){
+				panelwinkey();
+				return 1;
+			}
+		}
+		return 0;
+	}
+	if(*s != 'k' && *s != 'K')
+		return 0;
+	if(utfrune(s+1, Kwin) != nil){
+		if(*s == 'k' && !down){
+			down = 1;
+			panelwinkey();
+		}
+		if(*s == 'K')
+			down = 0;
+		return 1;
+	}
+	return 0;
+}
+
 void
 keyboardtap(void*)
 {
@@ -1095,6 +1132,8 @@ keyboardtap(void*)
 				shiftdown = utfrune(s+1, Kshift) != nil;
 				ctldown = utfrune(s+1, Kctl) != nil;
 			}
+			if(winkey(s))
+				break;
 			prev = cur;
 			cur = focused ? focused->cur : nil;
 			if(totap){

@@ -1,21 +1,14 @@
 #!/bin/rc
-# Windows-2000 style log out: end this rio session. init restarts the
-# profile, which replays the boot splash and the logon screen.
+# Windows-2000 style log out: end the session and return to the logon
+# screen. init's console respawn does not replay the login profile, so
+# reboot through the boot splash + logon instead (q9 disks are QEMU
+# snapshots; nothing to flush).
 
-f=/proc/$pid/args
-p=$pid
-# walk up to the rio process and terminate it
-for(i in 1 2 3 4 5 6 7 8){
-	if(! test -r /proc/$p/ppid)
-		break
-	p=`{cat /proc/$p/ppid}
-	if(test -r /proc/$p/args && grep -s '^rio ' /proc/$p/args){
-		echo 'log out: ending session'
-		kill $p >/dev/null >[2=1]
-		exit
-	}
-	if(~ $p 1)
-		break
+echo
+echo '  Logging out of Plan 9...'
+echo
+sleep 1
+if(! echo reboot >/dev/reboot >[2]$home/lib/q9shut.err){
+	echo 'log out: reboot write failed' >[1=2]
+	exit failed
 }
-echo 'log out: rio not found' >[1=2]
-exit notfound

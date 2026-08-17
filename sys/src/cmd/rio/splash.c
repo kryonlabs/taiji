@@ -14,7 +14,7 @@ enum {
 	SegW = 12,
 	SegGap = 4,
 	FrameMs = 60,
-	Nframes = 42,
+	Nframes = 90,	/* long enough for external test harnesses to catch */
 	MenuTickMs = 100,
 	MenuTimeout = 6,
 	DwellMs = 1000,
@@ -22,6 +22,9 @@ enum {
 	Menupad = 8,
 	Menuitemh = 20,
 };
+
+static int menutms = MenuTimeout*1000;
+static int nbarframes = Nframes;
 
 static char *bootstr[] = {
 	"Plan 9",
@@ -411,7 +414,7 @@ progressbar(Rectangle clip)
 		bar.max.y+16), display->white, ZP, font, s);
 	flushimage(display, 1);
 
-	for(i = 0; i < Nframes; i++){
+	for(i = 0; i < nbarframes; i++){
 		progressframe(bar, i % (Nsegs+3), blue, dim);
 		flushimage(display, 1);
 		sleep(FrameMs);
@@ -431,6 +434,11 @@ splashthread(void*)
 		sendul(splashdone, 1);
 		sendul(splashdone, 1);
 		return;
+	}
+	if(getenv("q9splashslow") != nil){
+		/* generous phases for the headless test harness */
+		menutms = 30*1000;
+		nbarframes = 300;
 	}
 	clip = screen->r;
 	boot = bootmenu(clip);
