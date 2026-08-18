@@ -5,6 +5,7 @@
 #include <keyboard.h>
 
 enum {
+	Menuh = 22,
 	Toolbarh = 30,
 	Addrh = 24,
 	Statush = 22,
@@ -40,7 +41,7 @@ struct TreeItem {
 	Rectangle r;
 };
 
-Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow, *blue, *navy;
+Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow, *blue, *navy, *green, *red;
 Entry *ents;
 int nents;
 char cwd[Maxpath];
@@ -48,6 +49,7 @@ int scroll;
 int selectedtree = -1;
 int viewmode = ViewList;
 int sel = -1;			/* selected entry */
+int mycomp;			/* My Computer special view */
 char clipboard[Maxpath];	/* copied/cut path */
 int clipcut;
 static char hist[Maxhist][Maxpath];
@@ -56,7 +58,7 @@ static int hpos;
 static ulong lastclick;
 static int lastsel;
 TreeItem tree[] = {
-	{ "My Computer", "/", 10, 10 },
+	{ "My Computer", "/mycomputer", 10, 10 },
 	{ "Namespace", "/", 22, 32 },
 	{ "/", "/", 34, 54 },
 	{ "/mnt", "/mnt", 34, 76 },
@@ -67,6 +69,12 @@ TreeItem tree[] = {
 
 Rectangle listrect(void);
 void redraw(void);
+static void msgbox(char*, char*);
+static int mcitemat(Point);
+static void menubar(Rectangle);
+static void newdir(void);
+static void pasteclip(void);
+static int menuhitx(Point, char**);
 
 void
 settreeforpath(char *path)
@@ -286,6 +294,8 @@ itemat(Point p)
 	Rectangle lr;
 	int i;
 
+	if(mycomp)
+		return mcitemat(p);
 	if(controlpanel())
 		return cpitemat(p);
 	lr = listrect();
@@ -371,6 +381,14 @@ navigate(char *path)
 {
 	char clean[Maxpath];
 
+	if(strcmp(path, "/mycomputer") == 0){
+		mycomp = 1;
+		selectedtree = 0;
+		nhist = hpos+1;
+		redraw();
+		return;
+	}
+	mycomp = 0;
 	strecpy(clean, clean+sizeof clean, path);
 	cleanname(clean);
 	if(loaddir(clean) != 0)
@@ -391,8 +409,14 @@ Out:
 void
 goback(void)
 {
+	if(mycomp && hpos < 0){
+		mycomp = 0;
+		redraw();
+		return;
+	}
 	if(hpos > 0){
 		hpos--;
+		mycomp = 0;
 		loaddir(hist[hpos]);
 		redraw();
 	}
@@ -414,7 +438,7 @@ listrect(void)
 	Rectangle r;
 
 	r = screen->r;
-	r.min.y += Toolbarh + Addrh;
+	r.min.y += Menuh + Toolbarh + Addrh;
 	r.max.y -= Statush;
 	r.min.x += Treew;
 	return r;
@@ -446,6 +470,155 @@ drawtree(Rectangle r)
 	}
 }
 
+/* ---- My Computer view ---- */
+
+typedef struct McEnt McEnt;
+struct McEnt {
+	char *label;
+	char *path;	/* nil: not accessible */
+	int drive;	/* 0 folder-ish, 1 disk, 2 floppy, 3 cd */
+};
+
+static McEnt mcents[] = {
+	{ "Local Disk (C:)", "/", 1 },
+	{ "Floppy (A:)", nil, 2 },
+	{ "CD-ROM (D:)", nil, 3 },
+	{ "Control Panel", "/lib/controlpanel", 0 },
+	{ "Recycle Bin", "", 0 },
+	{ "My Documents", "/usr/glenda", 0 },
+	{ nil, nil, 0 },
+};
+
+static void
+static drawmcicon(Rectangle r, McEnt *e)
+{
+	Point c;
+
+	c = Pt((r.min.x+r.max.x)/2, r.min.y+22);
+	switch(e->drive){
+	case 1:
+	case 2:
+		/* disk drive */
+		draw(screen, Rect(c.x-17, c.y-9, c.x+17, c.y+9), hilite, nil, ZP);
+		border(screen, Rect(c.x-17, c.y-9, c.x+17, c.y+9), 1, dark, ZP);
+		draw(screen, Rect(c.x-13, c.y-5, c.x+13, c.y+1), white, nil, ZP);
+		draw(screen, Rect(c.x+6, c.y+4, c.x+13, c.y+7), green, nil, ZP);
+		if(e->drive == 2)
+			draw(screen, Rect(c.x-13, c.y+3, c.x+13, c.y+5), shadow, nil, ZP);
+		break;
+	case 3:
+		/* cd */
+		ellipse(screen, c, 14, 14, 1, hilite, ZP);
+		ellipse(screen, c, 14, 14, 0, dark, ZP);
+		ellipse(screen, c, 4, 4, 1, white, ZP);
+		ellipse(screen, c, 4, 4, 0, dark, ZP);
+		break;
+	default:
+		if(strcmp(e->label, "Recycle Bin") == 0){
+			line(screen, Pt(c.x-7, c.y-10), Pt(c.x+7, c.y-10), 0, 0, 1, dark, ZP);
+			line(screen, Pt(c.x-9, c.y-9), Pt(c.x-5, c.y+11), 0, 0, 1, dark, ZP);
+			line(screen, Pt(c.x+9, c.y-9), Pt(c.x+5, c.y+11), 0, 0, 1, dark, ZP);
+			line(screen, Pt(c.x-5, c.y+11), Pt(c.x+5, c.y+11), 0, 0, 1, dark, ZP);
+			draw(screen, Rect(c.x-4, c.y-8, c.x-2, c.y+9), shadow, nil, ZP);
+			draw(screen, Rect(c.x+3, c.y-8, c.x+5, c.y+9), shadow, nil, ZP);
+			draw(screen, Rect(c.x-3, c.y-13, c.x+3, c.y-10), dark, nil, ZP);
+		}else if(strcmp(e->label, "Control Panel") == 0){
+			draw(screen, Rect(c.x-14, c.y-10, c.x+14, c.y+10), white, nil, ZP);
+			border(screen, Rect(c.x-14, c.y-10, c.x+14, c.y+10), 1, dark, ZP);
+			draw(screen, Rect(c.x-11, c.y-7, c.x+11, c.y-4), navy, nil, ZP);
+			line(screen, Pt(c.x-7, c.y-1), Pt(c.x+7, c.y-1), 0, 0, 0, dark, ZP);
+			line(screen, Pt(c.x-7, c.y+3), Pt(c.x+7, c.y+3), 0, 0, 0, dark, ZP);
+			draw(screen, Rect(c.x-4, c.y-2, c.x-1, c.y+1), green, nil, ZP);
+			draw(screen, Rect(c.x+1, c.y+2, c.x+4, c.y+5), red, nil, ZP);
+		}else{
+			draw(screen, Rect(c.x-16, c.y-6, c.x+16, c.y+11), yellow, nil, ZP);
+			draw(screen, Rect(c.x-12, c.y-11, c.x+2, c.y-6), yellow, nil, ZP);
+			border(screen, Rect(c.x-16, c.y-6, c.x+16, c.y+11), 1, dark, ZP);
+		}
+	}
+}
+
+static void
+static mcopen(int i)
+{
+	char path[Maxpath];
+
+	if(i < 0 || i >= nelem(mcents)-1)
+		return;
+	if(mcents[i].path == nil){
+		msgbox("Error", "The device is not accessible.");
+		return;
+	}
+	if(mcents[i].path[0] == 0)
+		strecpy(path, path+sizeof path, trashdir());
+	else
+		strecpy(path, path+sizeof path, mcents[i].path);
+	navigate(path);
+}
+
+static int
+static mcitemat(Point p)
+{
+	Rectangle lr, r;
+	int i, x, y;
+
+	lr = listrect();
+	x = lr.min.x + 20;
+	y = lr.min.y + 20;
+	for(i = 0; mcents[i].label != nil; i++){
+		r = Rect(x, y, x+108, y+72);
+		if(ptinrect(p, r))
+			return i;
+		x += 122;
+		if(x+108 > lr.max.x-12){
+			x = lr.min.x + 20;
+			y += 84;
+		}
+		if(y+72 > lr.max.y-8)
+			break;
+	}
+	return -1;
+}
+
+/* small message box with a single OK button */
+static void
+static msgbox(char *title, char *line)
+{
+	Rectangle dlg, ok;
+	Event e;
+	int done, buttons;
+
+	dlg = Rect((screen->r.min.x+screen->r.max.x)/2-170,
+		(screen->r.min.y+screen->r.max.y)/2-60,
+		(screen->r.min.x+screen->r.max.x)/2+170,
+		(screen->r.min.y+screen->r.max.y)/2+60);
+	ok = Rect(dlg.max.x-100, dlg.max.y-48, dlg.max.x-16, dlg.max.y-24);
+
+	done = 0;
+	buttons = 0;
+	while(!done){
+		draw(screen, dlg, face, nil, ZP);
+		border(screen, dlg, 1, dark, ZP);
+		draw(screen, Rect(dlg.min.x+3, dlg.min.y+3, dlg.max.x-3, dlg.min.y+24), navy, nil, ZP);
+		string(screen, Pt(dlg.min.x+10, dlg.min.y+(24-font->height)/2+3), white, ZP, font, title);
+		string(screen, Pt(dlg.min.x+20, dlg.min.y+40), text, ZP, font, line);
+		btn(ok, "OK");
+		flushimage(display, 1);
+		switch(event(&e)){
+		case Ekeyboard:
+			if(e.kbdc == '\n' || e.kbdc == Kesc)
+				done = 1;
+			break;
+		case Emouse:
+			if((e.mouse.buttons & 1) && !(buttons & 1) && ptinrect(e.mouse.xy, ok))
+				done = 1;
+			buttons = e.mouse.buttons;
+			break;
+		}
+	}
+	redraw();
+}
+
 void
 redraw(void)
 {
@@ -454,7 +627,12 @@ redraw(void)
 	int i, y, x;
 
 	draw(screen, screen->r, face, nil, ZP);
-	r = Rect(screen->r.min.x, screen->r.min.y, screen->r.max.x, screen->r.min.y+Toolbarh);
+	/* menu bar */
+	r = Rect(screen->r.min.x, screen->r.min.y, screen->r.max.x, screen->r.min.y+Menuh);
+	draw(screen, r, face, nil, ZP);
+	menubar(r);
+
+	r = Rect(screen->r.min.x, screen->r.min.y+Menuh, screen->r.max.x, screen->r.min.y+Menuh+Toolbarh);
 	draw(screen, r, face, nil, ZP);
 	btn(Rect(r.min.x+6, r.min.y+4, r.min.x+6+Btnw, r.max.y-4), "Back");
 	btn(Rect(r.min.x+80, r.min.y+4, r.min.x+80+Btnw, r.max.y-4), "Forward");
@@ -463,17 +641,17 @@ redraw(void)
 	btn(Rect(r.min.x+322, r.min.y+4, r.min.x+322+Btnw+18, r.max.y-4), "New Dir");
 	btn(Rect(r.min.x+412, r.min.y+4, r.min.x+412+Btnw, r.max.y-4), viewmode == ViewList ? "Icons" : "List");
 
-	r = Rect(screen->r.min.x, screen->r.min.y+Toolbarh, screen->r.max.x, screen->r.min.y+Toolbarh+Addrh);
+	r = Rect(screen->r.min.x, screen->r.min.y+Menuh+Toolbarh, screen->r.max.x, screen->r.min.y+Menuh+Toolbarh+Addrh);
 	draw(screen, r, face, nil, ZP);
 	string(screen, Pt(r.min.x+8, r.min.y+5), text, ZP, font, "Address");
 	r.min.x += 70;
 	r.max.x -= 8;
 	draw(screen, insetrect(r, 3), white, nil, ZP);
 	bevel(insetrect(r, 3), 1);
-	string(screen, Pt(r.min.x+9, r.min.y+6), text, ZP, font, cwd);
+	string(screen, Pt(r.min.x+9, r.min.y+6), text, ZP, font, mycomp ? "My Computer" : cwd);
 
 	r = screen->r;
-	r.min.y += Toolbarh + Addrh;
+	r.min.y += Menuh + Toolbarh + Addrh;
 	r.max.y -= Statush;
 	r.max.x = r.min.x + Treew;
 	drawtree(r);
@@ -481,6 +659,28 @@ redraw(void)
 	lr = listrect();
 	draw(screen, lr, white, nil, ZP);
 	bevel(lr, 1);
+	if(mycomp){
+		x = lr.min.x + 20;
+		y = lr.min.y + 20;
+		for(i = 0; mcents[i].label != nil; i++){
+			row = Rect(x, y, x+108, y+72);
+			if(i == sel){
+				draw(screen, row, hilite, nil, ZP);
+				border(screen, row, 1, dark, ZP);
+			}
+			drawmcicon(row, &mcents[i]);
+			string(screen, Pt(row.min.x+(Dx(row)-stringwidth(font, mcents[i].label))/2,
+				row.min.y+48), text, ZP, font, mcents[i].label);
+			x += 122;
+			if(x+108 > lr.max.x-12){
+				x = lr.min.x + 20;
+				y += 84;
+			}
+			if(y+72 > lr.max.y-8)
+				break;
+		}
+		goto Status;
+	}
 	if(controlpanel()){
 		x = lr.min.x + 20;
 		y = lr.min.y + 20;
@@ -563,7 +763,9 @@ redraw(void)
 Status:
 	r = Rect(screen->r.min.x, screen->r.max.y-Statush, screen->r.max.x, screen->r.max.y);
 	draw(screen, r, face, nil, ZP);
-	if(controlpanel())
+	if(mycomp)
+		snprint(buf, sizeof buf, "%d object%s", nelem(mcents)-1, nelem(mcents)==2 ? "" : "s");
+	else if(controlpanel())
 		snprint(buf, sizeof buf, "%d item%s", nents-1, nents==2 ? "" : "s");
 	else if(trashview())
 		snprint(buf, sizeof buf, "Recycle Bin: %d object%s", nents-1, nents==2 ? "" : "s");
@@ -571,6 +773,139 @@ Status:
 		snprint(buf, sizeof buf, "%d object%s", nents, nents==1 ? "" : "s");
 	string(screen, Pt(r.min.x+8, r.min.y+4), text, ZP, font, buf);
 	flushimage(display, 1);
+}
+
+/* ---- menu bar ---- */
+
+static char *menutitles[] = { "File", "Edit", "View", "Help", nil };
+
+static void
+static menubar(Rectangle r)
+{
+	int i, x;
+
+	x = r.min.x + 8;
+	for(i = 0; menutitles[i]; i++){
+		string(screen, Pt(x, r.min.y+(Menuh-font->height)/2), text, ZP, font, menutitles[i]);
+		x += stringwidth(font, menutitles[i]) + 18;
+	}
+}
+
+static int
+static menubarhit(Point p)
+{
+	Rectangle r;
+	int i, x;
+
+	r = Rect(screen->r.min.x, screen->r.min.y, screen->r.max.x, screen->r.min.y+Menuh);
+	if(!ptinrect(p, r))
+		return -1;
+	x = r.min.x + 8;
+	for(i = 0; menutitles[i]; i++){
+		int w = stringwidth(font, menutitles[i]);
+		if(p.x >= x-4 && p.x <= x+w+6)
+			return i;
+		x += w + 18;
+	}
+	return -1;
+}
+
+static void
+expnewwin(void)
+{
+	int fd;
+
+	fd = open("/dev/wctl", OWRITE);
+	if(fd >= 0){
+		if(mycomp)
+			fprint(fd, "new -r 60 80 760 560 explorer /mycomputer");
+		else
+			fprint(fd, "new -r 60 80 760 560 explorer %s", cwd);
+		close(fd);
+	}
+}
+
+static void
+static aboutbox(void)
+{
+	msgbox("About Explorer", "Plan 9 Explorer - win2k style shell");
+}
+
+static void
+static menubaractivate(int m, Point p)
+{
+	char *fitems[] = { "New Window", "New Folder", "-", "Close", nil };
+	char *eitems[] = { "Copy", "Cut", "Paste", "-", "Select All", nil };
+	char *vitems[] = { "", "-", "Refresh", nil };
+	char *hitems[] = { "About Explorer", nil };
+	char **items;
+	int i, r;
+
+	vitems[0] = viewmode == ViewList ? "Large Icons" : "List";
+	switch(m){
+	case 0: items = fitems; break;
+	case 1: items = eitems; break;
+	case 2: items = vitems; break;
+	default: items = hitems; break;
+	}
+	/* anchor the dropdown under its title */
+	{
+		int x = screen->r.min.x + 8;
+		for(i = 0; i < m && menutitles[i]; i++)
+			x += stringwidth(font, menutitles[i]) + 18;
+		p = Pt(x-4, screen->r.min.y+Menuh);
+	}
+	r = menuhitx(p, items);
+	if(r < 0)
+		return;
+	switch(m){
+	case 0:
+		switch(r){
+		case 0: expnewwin(); break;
+		case 1: newdir(); break;
+		case 3: exits(nil); break;
+		}
+		break;
+	case 1:
+		switch(r){
+		case 0:
+		case 1:
+			if(sel >= 0 && sel < nents){
+				cleanpath(clipboard, sizeof clipboard, cwd, ents[sel].name);
+				clipcut = r == 1;
+			}
+			break;
+		case 2:
+			pasteclip();
+			break;
+		case 4:
+			sel = nents > 1 ? 1 : -1;
+			redraw();
+			break;
+		}
+		break;
+	case 2:
+		switch(r){
+		case 0:
+			viewmode = viewmode == ViewList ? ViewIcon : ViewList;
+			redraw();
+			break;
+		case 2:
+			if(mycomp){
+				mycomp = 0;
+				navigate("/mycomputer");
+			}else{
+				loaddir(cwd);
+				redraw();
+			}
+			break;
+		}
+		break;
+	case 3:
+		if(r == 0)
+			aboutbox();
+		break;
+	}
 }
 
 /* ---- in-window popup menu ---- */
@@ -1152,7 +1487,11 @@ contextmenu(Point p)
 	int i, m;
 
 	i = itemat(p);
-	if(controlpanel()){
+	if(mycomp){
+		if(i < 0)
+			return;
+		items = cpitems;	/* just Open */
+	}else if(controlpanel()){
 		if(i < 0)
 			return;
 		items = cpitems;
@@ -1240,42 +1579,46 @@ int
 toolbar(Point p)
 {
 	Rectangle r;
+	int top, bot;
 
-	r = Rect(screen->r.min.x+6, screen->r.min.y+4,
-		screen->r.min.x+6+Btnw, screen->r.min.y+Toolbarh-4);
+	top = screen->r.min.y+Menuh+4;
+	bot = screen->r.min.y+Menuh+Toolbarh-4;
+	r = Rect(screen->r.min.x+6, top, screen->r.min.x+6+Btnw, bot);
 	if(ptinrect(p, r)){
 		goback();
 		return 1;
 	}
-	r = Rect(screen->r.min.x+80, screen->r.min.y+4,
-		screen->r.min.x+80+Btnw, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+80, top, screen->r.min.x+80+Btnw, bot);
 	if(ptinrect(p, r)){
 		goforward();
 		return 1;
 	}
-	r = Rect(screen->r.min.x+154, screen->r.min.y+4,
-		screen->r.min.x+154+Btnw, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+154, top, screen->r.min.x+154+Btnw, bot);
 	if(ptinrect(p, r)){
-		char path[Maxpath];
-		cleanpath(path, sizeof path, cwd, "..");
-		navigate(path);
+		if(mycomp)
+			navigate("/");
+		else{
+			char path[Maxpath];
+			cleanpath(path, sizeof path, cwd, "..");
+			navigate(path);
+		}
 		return 1;
 	}
-	r = Rect(screen->r.min.x+228, screen->r.min.y+4,
-		screen->r.min.x+228+Btnw+12, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+228, top, screen->r.min.x+228+Btnw+12, bot);
 	if(ptinrect(p, r)){
-		loaddir(cwd);
-		redraw();
+		if(!mycomp){
+			loaddir(cwd);
+			redraw();
+		}
 		return 1;
 	}
-	r = Rect(screen->r.min.x+322, screen->r.min.y+4,
-		screen->r.min.x+322+Btnw+18, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+322, top, screen->r.min.x+322+Btnw+18, bot);
 	if(ptinrect(p, r)){
-		newdir();
+		if(!mycomp)
+			newdir();
 		return 1;
 	}
-	r = Rect(screen->r.min.x+412, screen->r.min.y+4,
-		screen->r.min.x+412+Btnw, screen->r.min.y+Toolbarh-4);
+	r = Rect(screen->r.min.x+412, top, screen->r.min.x+412+Btnw, bot);
 	if(ptinrect(p, r)){
 		viewmode = viewmode == ViewList ? ViewIcon : ViewList;
 		redraw();
@@ -1290,6 +1633,10 @@ openrow(Point p)
 	char path[Maxpath];
 	int i;
 
+	if(mycomp){
+		mcopen(mcitemat(p));
+		return;
+	}
 	if(controlpanel()){
 		i = cpitemat(p);
 		if(i >= 0){
@@ -1361,6 +1708,10 @@ main(int argc, char **argv)
 		strecpy(path, path+sizeof path, argv[0]);
 	else if(getwd(path, sizeof path) == nil)
 		strecpy(path, path+sizeof path, "/");
+	if(strcmp(path, "/mycomputer") == 0){
+		mycomp = 1;
+		strecpy(path, path+sizeof path, "/");
+	}
 	cleanname(path);
 	if(initdraw(nil, nil, "explorer") < 0)
 		sysfatal("initdraw: %r");
@@ -1373,12 +1724,19 @@ main(int argc, char **argv)
 	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
 	yellow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xF8D878FF);
 	navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000080FF);
+	green = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x008000FF);
+	red = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xB00000FF);
 	einit(Emouse|Ekeyboard);
 	if(loaddir(path) < 0)
 		sysfatal("open %s: %r", path);
-	strecpy(hist[0], hist[0]+Maxpath, cwd);
-	nhist = 1;
-	hpos = 0;
+	if(mycomp){
+		nhist = 0;
+		hpos = -1;
+	}else{
+		strecpy(hist[0], hist[0]+Maxpath, cwd);
+		nhist = 1;
+		hpos = 0;
+	}
 	redraw();
 	buttons = 0;
 	lastclick = 0;
@@ -1387,6 +1745,11 @@ main(int argc, char **argv)
 		switch(event(&e)){
 		case Emouse:
 			if((e.mouse.buttons & 1) && !(buttons & 1)){
+				i = menubarhit(e.mouse.xy);
+				if(i >= 0){
+					menubaractivate(i, e.mouse.xy);
+					break;
+				}
 				if(toolbar(e.mouse.xy))
 					break;
 				if(opentree(e.mouse.xy))

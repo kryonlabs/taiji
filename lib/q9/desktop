@@ -1,4 +1,4 @@
-My Computer	explorer /	comp
+My Computer	explorer /mycomputer	comp
 My Documents	explorer /usr/glenda	doc
 Recycle Bin	explorer $home/.trash	bin
 Control Panel	controlpanel	ctl
