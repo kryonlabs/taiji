@@ -150,11 +150,12 @@ if check $T/rund.ppm rundlg_at; then
 else
 	bad "run dialog opens with entry field"
 fi
-python3 $T/vncsend.py esc
+monkey esc
 sleep 1
 
 echo "== boot 1: ctrl+shift+esc task manager =="
-python3 $T/vncsend.py +ctrl +shift esc -shift -ctrl
+. $root/boot/q9/monclick.sh
+monkey ctrl-alt-shift-esc
 sleep 4
 fastshot tmg
 sleep 1
@@ -163,9 +164,7 @@ if check $T/tmg.ppm white_at 100 150; then
 else
 	bad "task manager window appears"
 fi
-monclick 150 200
-sleep 1
-python3 $T/vncsend.py q
+monclick 622 42
 sleep 2
 
 echo "== boot 1: desktop context menu =="

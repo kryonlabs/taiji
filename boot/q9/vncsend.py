@@ -35,9 +35,17 @@ s.sendall(bytes([0, 0, 0, 0]) + bytes(16))                  # SetPixelFormat
 s.sendall(bytes([2, 0, 1, 0, 0, 0, 0]))                     # SetEncodings: 1 = RAW
 s.sendall(bytes([3, 0, 0, 0, 0, 0, 4, 0, 4]))               # FBUpdateRequest
 time.sleep(0.3)
+s.sendall(bytes([3, 1, 0, 0, 0, 0, 4, 0, 4]))               # incremental update request
 
 def key(kc, down):
     s.sendall(bytes([4, down, kc >> 24, kc >> 16 & 0xFF, kc >> 8 & 0xFF, kc & 0xFF]))
+
+# prime the connection: a harmless shift cycle settles QEMU's VNC
+# input handling before the real keys go out
+key(0xffe1, 1)
+time.sleep(0.1)
+key(0xffe1, 0)
+time.sleep(0.2)
 
 for arg in sys.argv[1:]:
     down, up = 1, 1
