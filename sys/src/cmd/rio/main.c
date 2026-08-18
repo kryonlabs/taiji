@@ -581,23 +581,56 @@ pick(void)
 	return w1;
 }
 
+/*
+ * Live window drag: the window follows the pointer with its pixels
+ * (originwindow blits the backing store, no client redraw), and a
+ * single wresize at the end restores the logical/screen invariant.
+ * Size-changing snap targets half-maximize live, like the rubber
+ * band did.
+ */
 void
 grab(Window *w, int btn)
 {
+	Rectangle r0, cur, nr;
+	Point start;
+	int but;
+
 	if(w == nil)
 		w = clickwindow(btn, mctl);
-	if(w == nil)
+	if(w == nil){
 		setcursoroverride(nil, FALSE);
-	else{
-		Rectangle r = dragrect(w, btn, mctl);
-		if((Dx(r) > 0 || Dy(r) > 0) && !eqrect(r, w->frame->r)){
-			if(eqrect(r, panelworkrect()))
-				wmaximize(w);
-			else
-				wresize(w, r);
-			wfocus(w);
+		return;
+	}
+	but = 1<<(btn-1);
+	r0 = w->frame->r;
+	cur = r0;
+	start = mctl->xy;
+	while(mctl->buttons == but){
+		nr = snapmove(w, rectaddpt(r0, subpt(mctl->xy, start)), mctl->xy);
+		if(!eqrect(nr, cur)){
+			if(Dx(nr) == Dx(cur) && Dy(nr) == Dy(cur)){
+				/* pure move: keep logical coords, blit */
+				originwindow(w->frame, w->frame->r.min, nr.min);
+			}else{
+				/* snapped to a different size: reshape */
+				wresize(w, nr);
+			}
+			cur = nr;
 			flushimage(display, 1);
 		}
+		readmouse(mctl);
+	}
+	if(mctl->buttons){
+		/* chorded another button: cancel the drag */
+		wresize(w, r0);
+		drainmouse(mctl, nil);
+	}else if(!eqrect(cur, r0)){
+		if(eqrect(cur, panelworkrect()))
+			wmaximize(w);
+		else
+			wresize(w, cur);
+		wfocus(w);
+		flushimage(display, 1);
 	}
 }
 
@@ -1293,7 +1326,10 @@ winkey(char *s)
 	if(*s != 'k' && *s != 'K')
 		return 0;
 	ctl = utfrune(s+1, Kctl) != nil;
-	if(ctl && utfrune(s+1, Kesc) != nil){
+	/* plain Ctrl+Esc only: with Shift it is the task manager
+	 * chord and belongs to syskeys, with Alt the security one */
+	if(ctl && utfrune(s+1, Kesc) != nil &&
+	   utfrune(s+1, Kshift) == nil && utfrune(s+1, Kalt) == nil){
 		if(*s == 'k'){
 			panelwinkey();
 			return 1;
@@ -1386,7 +1422,7 @@ syskeys(char *s)
 		if(alt)
 			altdown = 1;
 		if(altdown && utfrune(s+1, '\t') != nil){
-			sendul(switchchan, 0);
+				sendul(switchchan, 0);
 			sendul(switchchan, sh ? 2 : 1);
 			free(s);
 			return 1;
@@ -1406,13 +1442,13 @@ syskeys(char *s)
 			return 1;
 		}
 		if(ctl && alt && utfrune(s+1, Kdel) != nil){
-			req.op = UIsecu;
+				req.op = UIsecu;
 			send(actchan, &req);
 			free(s);
 			return 1;
 		}
 		if(ctl && sh && utfrune(s+1, Kesc) != nil){
-			req.op = UItaskmgr;
+				req.op = UItaskmgr;
 			send(actchan, &req);
 			free(s);
 			return 1;
@@ -1426,7 +1462,7 @@ syskeys(char *s)
 		if(altdown && !alt){
 			altdown = 0;
 			if(switcheractive()){
-				sendul(switchchan, 3);
+						sendul(switchchan, 3);
 				free(s);
 				return 1;
 			}
@@ -1675,7 +1711,7 @@ threadmain(int argc, char *argv[])
 
 	timerinit();
 
-	splashdone = chancreate(sizeof(ulong), 3);
+	splashdone = chancreate(sizeof(ulong), 4);
 	logonchan = chancreate(sizeof(ulong), 2);
 	threadcreate(splashthread, nil, mainstacksize);
 	threadcreate(mthread, nil, mainstacksize);
@@ -1690,6 +1726,7 @@ threadmain(int argc, char *argv[])
 	deskicondraw(fakebg);
 	paneldraw();
 	flushimage(display, 1);
+	panelballoon("Plan 9", "Welcome to Plan 9");
 
 	startfs();
 

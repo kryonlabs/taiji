@@ -409,6 +409,7 @@ int paneliconbyname(char *name);
 void panellaunch(char *cmd);
 Rectangle paneltaskrect(Window *w);
 void paneltick(void);
+void panelballoon(char *title, char *text);
 
 /* dialog.c: generic win2k widgets and modal dialogs */
 void modalbegin(void);

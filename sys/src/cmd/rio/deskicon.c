@@ -5,9 +5,11 @@
  * Windows-2000 style desktop icons: loaded from /lib/q9/desktop and
  * $home/lib/desktop (label<TAB>command[<TAB>icon], one per line),
  * drawn on the background between windows, selected with a single
- * click and launched with a double click. Button 3 on the background
- * opens the desktop context menu instead of the classic rio menu
- * (which stays available on the 1-2 chord).
+ * click and launched with a double click. Icons can be dragged to
+ * any spot (positions persist in $home/lib/deskicons), right click
+ * on an icon opens its own menu, right click on the desktop the
+ * desktop menu (the classic rio menu stays on the 1-2 chord), and
+ * the Recycle Bin icon shows whether the bin holds anything.
  */
 
 enum {
@@ -15,7 +17,6 @@ enum {
 	CellW = 72,
 	CellH = 72,
 	IconSz = 32,
-	LabelLines = 2,
 };
 
 typedef struct DIcon DIcon;
@@ -24,13 +25,30 @@ struct DIcon {
 	char cmd[160];
 	int icon;
 	int selected;
-	Point pos;
+	Point pos;	/* -1,-1: auto layout */
 };
 
 static DIcon icons[MaxIcons];
 static int nicons;
 static ulong lastclick;
 static int lasticon;
+static int binfull;
+
+static char *
+trashdir(void)
+{
+	static char t[128];
+	char *home;
+
+	home = getenv("home");
+	if(home == nil)
+		strecpy(t, t+sizeof t, "/tmp");
+	else{
+		snprint(t, sizeof t, "%s/.trash", home);
+		free(home);
+	}
+	return t;
+}
 
 static void
 subhome(char *dst, int nd, char *s)
@@ -57,6 +75,37 @@ subhome(char *dst, int nd, char *s)
 	free(home);
 }
 
+/* suppression list: icons the user deleted from the desktop */
+static int
+isdeleted(char *label)
+{
+	char *home, *path, buf[256], *line;
+	Biobuf *bp;
+	int dead;
+
+	home = getenv("home");
+	if(home == nil)
+		return 0;
+	path = smprint("%s/lib/deskdel", home);
+	free(home);
+	if(path == nil)
+		return 0;
+	bp = Bopen(path, OREAD);
+	free(path);
+	if(bp == nil)
+		return 0;
+	dead = 0;
+	while((line = Brdline(bp, '\n')) != nil){
+		line[Blinelen(bp)-1] = 0;
+		if(strcmp(line, label) == 0){
+			dead = 1;
+			break;
+		}
+	}
+	Bterm(bp);
+	return dead;
+}
+
 static void
 addicon(char *label, char *cmd, char *icname)
 {
@@ -64,10 +113,13 @@ addicon(char *label, char *cmd, char *icname)
 		return;
 	if(label[0] == 0 || cmd[0] == 0)
 		return;
+	if(isdeleted(label))
+		return;
 	strecpy(icons[nicons].label, icons[nicons].label+sizeof icons[nicons].label, label);
 	subhome(icons[nicons].cmd, sizeof icons[nicons].cmd, cmd);
 	icons[nicons].icon = icname[0] ? paneliconbyname(icname) : Ifolder;
 	icons[nicons].selected = 0;
+	icons[nicons].pos = Pt(-1, -1);
 	nicons++;
 }
 
@@ -91,6 +143,67 @@ readicons(char *path)
 	Bterm(bp);
 }
 
+/* remember where the user dragged each icon */
+static void
+readpositions(void)
+{
+	Biobuf *bp;
+	char *home, *path, *line, *f[4];
+	int i, nf, x, y;
+
+	home = getenv("home");
+	if(home == nil)
+		return;
+	path = smprint("%s/lib/deskicons", home);
+	free(home);
+	if(path == nil)
+		return;
+	bp = Bopen(path, OREAD);
+	if(bp == nil){
+		free(path);
+		return;
+	}
+	while((line = Brdline(bp, '\n')) != nil){
+		line[Blinelen(bp)-1] = 0;
+		nf = getfields(line, f, nelem(f), 0, "\t");
+		if(nf < 3)
+			continue;
+		x = strtol(f[1], nil, 10);
+		y = strtol(f[2], nil, 10);
+		for(i = 0; i < nicons; i++)
+			if(strcmp(icons[i].label, f[0]) == 0)
+				icons[i].pos = Pt(x, y);
+	}
+	Bterm(bp);
+	free(path);
+}
+
+static void
+savepositions(void)
+{
+	char *home, *path;
+	Biobuf *bp;
+	int i;
+
+	home = getenv("home");
+	if(home == nil)
+		return;
+	path = smprint("%s/lib/deskicons", home);
+	free(home);
+	if(path == nil)
+		return;
+	bp = Bopen(path, OWRITE|OTRUNC);
+	if(bp == nil){
+		free(path);
+		return;
+	}
+	for(i = 0; i < nicons; i++)
+		if(icons[i].pos.x >= 0)
+			Bprint(bp, "%s\t%d\t%d\n", icons[i].label, icons[i].pos.x, icons[i].pos.y);
+	Bterm(bp);
+	free(path);
+}
+
 void
 deskiconinit(void)
 {
@@ -107,10 +220,27 @@ deskiconinit(void)
 		}
 		free(home);
 	}
+	readpositions();
 	lasticon = -1;
 	lastclick = 0;
 }
 
+static int
+iconoccupied(Rectangle wr, Point p)
+{
+	int i;
+
+	for(i = 0; i < nicons; i++)
+		if(icons[i].pos.x >= 0 && abs(icons[i].pos.x-p.x) < CellW &&
+		   abs(icons[i].pos.y-p.y) < CellH)
+			return 1;
+	/* keep off the very edges */
+	if(!ptinrect(p, Rect(wr.min.x+6, wr.min.y+4, wr.max.x-CellW-6, wr.max.y-CellH-6)))
+		return 1;
+	return 0;
+}
+
+/* auto place the icons that have no saved position */
 static void
 layouticons(void)
 {
@@ -121,9 +251,16 @@ layouticons(void)
 	x = wr.min.x + 10;
 	y = wr.min.y + 8;
 	for(i = 0; i < nicons; i++){
-		if(y + CellH > wr.max.y){
-			x += CellW + 10;
-			y = wr.min.y + 8;
+		if(icons[i].pos.x >= 0)
+			continue;
+		for(;;){
+			if(y + CellH > wr.max.y){
+				x += CellW + 10;
+				y = wr.min.y + 8;
+			}
+			if(!iconoccupied(wr, Pt(x, y)))
+				break;
+			y += CellH;
 		}
 		icons[i].pos = Pt(x, y);
 		y += CellH;
@@ -180,6 +317,15 @@ drawoneicon(Image *dst, DIcon *ic)
 		draw(dst, insetrect(ir, -3), sel, nil, ZP);
 	}
 	paneldrawicon(ir, ic->icon);
+	if(ic->icon == Ibin && binfull){
+		/* crumpled paper sticking out of the bin */
+		draw(dst, Rect(ir.min.x+4, ir.min.y+2, ir.max.x-4, ir.min.y+8),
+			getcolor(nil, 0xFFFFFFFF), nil, ZP);
+		line(dst, Pt(ir.min.x+6, ir.min.y+2), Pt(ir.min.x+9, ir.min.y-1), 0, 0, 0,
+			getcolor(nil, 0xFFFFFFFF), ZP);
+		line(dst, Pt(ir.min.x+11, ir.min.y+2), Pt(ir.min.x+13, ir.min.y), 0, 0, 0,
+			getcolor(nil, 0xFFFFFFFF), ZP);
+	}
 
 	nlines = splitlabel(ic->label, l1, l2);
 	for(i = 0; i < nlines; i++){
@@ -202,10 +348,26 @@ drawoneicon(Image *dst, DIcon *ic)
 void
 deskicondraw(Image *dst)
 {
-	int i;
+	Dir *d;
+	int i, n, fd;
 
 	if(dst == nil || Dx(dst->r) <= 0)
 		return;
+
+	/* recycle bin state: anything in the trash besides the origin log? */
+	binfull = 0;
+	fd = open(trashdir(), OREAD);
+	if(fd >= 0){
+		n = dirreadall(fd, &d);
+		close(fd);
+		for(i = 0; i < n; i++)
+			if(strcmp(d[i].name, ".origin") != 0){
+				binfull = 1;
+				break;
+			}
+		free(d);
+	}
+
 	layouticons();
 	for(i = 0; i < nicons; i++)
 		drawoneicon(dst, &icons[i]);
@@ -245,13 +407,16 @@ selecticon(int sel)
 }
 
 /*
- * Button 1 on the background: click selects, double click launches.
- * Returns TRUE when the event was handled here.
+ * Button 1 on the background: click selects, drag moves the icon to
+ * a free spot (remembered in $home/lib/deskicons), double click
+ * launches. Returns TRUE when the event was handled here.
  */
 int
 deskiconmouse(Mousectl *mc)
 {
-	int hit;
+	Rectangle wr;
+	Point start, orig, d;
+	int hit, dragging;
 	ulong now;
 
 	if(nicons == 0)
@@ -263,9 +428,37 @@ deskiconmouse(Mousectl *mc)
 			return FALSE;
 		}
 		selecticon(hit);
-		drainmouse(mc, nil);
+		start = mc->xy;
+		orig = icons[hit].pos;
+		dragging = FALSE;
+		wr = panelworkrect();
+		while(mc->buttons & 1){
+			readmouse(mc);
+			d = subpt(mc->xy, start);
+			if(!dragging && (abs(d.x) > 6 || abs(d.y) > 6))
+				dragging = TRUE;
+			if(dragging){
+				icons[hit].pos = addpt(orig, d);
+				if(icons[hit].pos.x < wr.min.x+4)
+					icons[hit].pos.x = wr.min.x+4;
+				if(icons[hit].pos.y < wr.min.y+4)
+					icons[hit].pos.y = wr.min.y+4;
+				if(icons[hit].pos.x > wr.max.x-CellW-4)
+					icons[hit].pos.x = wr.max.x-CellW-4;
+				if(icons[hit].pos.y > wr.max.y-CellH-4)
+					icons[hit].pos.y = wr.max.y-CellH-4;
+				deskiconredraw();
+			}
+		}
+		if(dragging){
+			savepositions();
+			lasticon = -1;
+			lastclick = 0;
+			selecticon(-1);
+			return TRUE;
+		}
 		now = mc->msec;
-		if(lasticon == hit && now - lastclick < 450){
+		if(lasticon == hit && now - lastclick < 900){
 			panellaunch(icons[hit].cmd);
 			selecticon(-1);
 			lasticon = -1;
@@ -313,33 +506,72 @@ removeall(char *path)
 static void
 emptybin(void)
 {
-	char *home, *trash, *sub;
 	Dir *d;
+	char *t, *sub;
 	int fd, n, i;
 
-	home = getenv("home");
-	if(home == nil)
+	t = trashdir();
+	fd = open(t, OREAD);
+	if(fd < 0)
 		return;
-	trash = smprint("%s/.trash", home);
-	free(home);
-	if(trash == nil)
-		return;
-	fd = open(trash, OREAD);
-	if(fd >= 0){
-		n = dirreadall(fd, &d);
-		close(fd);
-		for(i = 0; i < n; i++){
-			sub = smprint("%s/%s", trash, d[i].name);
-			if(sub == nil)
-				continue;
-			if(d[i].mode & DMDIR)
-				removeall(sub);
-			remove(sub);
-			free(sub);
-		}
-		free(d);
+	n = dirreadall(fd, &d);
+	close(fd);
+	for(i = 0; i < n; i++){
+		sub = smprint("%s/%s", t, d[i].name);
+		if(sub == nil)
+			continue;
+		if(d[i].mode & DMDIR)
+			removeall(sub);
+		remove(sub);
+		free(sub);
 	}
-	free(trash);
+	free(d);
+}
+
+/* per-icon menu: button 3 on an icon */
+static void
+iconmenu(Mousectl *mc, int hit)
+{
+	char *items[5];
+	char *home, *path;
+	Biobuf *bp;
+	int n, sel;
+
+	n = 0;
+	items[n++] = "Open";
+	items[n++] = "-";
+	items[n++] = "Delete Icon";
+	items[n] = nil;
+
+	sel = winmenuhit(mc, Rect(mc->xy.x, mc->xy.y, mc->xy.x+1, mc->xy.y+1), items, n, -1);
+	switch(sel){
+	case 0:
+		panellaunch(icons[hit].cmd);
+		break;
+	case 2:
+		/* remember the deletion so it survives the next load */
+		home = getenv("home");
+		if(home != nil){
+			path = smprint("%s/lib/deskdel", home);
+			free(home);
+			if(path != nil){
+				int dfd;
+				dfd = open(path, OWRITE);
+				if(dfd < 0)
+					dfd = create(path, OWRITE, 0666);
+				if(dfd >= 0){
+					seek(dfd, 0, 2);
+					fprint(dfd, "%s\n", icons[hit].label);
+					close(dfd);
+				}
+				free(path);
+			}
+		}
+		memmove(&icons[hit], &icons[hit+1], (nicons-hit-1)*sizeof(DIcon));
+		nicons--;
+		deskiconredraw();
+		break;
+	}
 }
 
 void
@@ -347,8 +579,13 @@ deskmenuactivate(Mousectl *mc)
 {
 	char *items[11];
 	char *home;
-	int sel, n;
+	int sel, n, hit;
 	char buf[160];
+
+	if((hit = iconat(mc->xy)) >= 0){
+		iconmenu(mc, hit);
+		return;
+	}
 
 	n = 0;
 	items[n++] = "New Terminal";
@@ -368,6 +605,10 @@ deskmenuactivate(Mousectl *mc)
 		new(newrect());
 		break;
 	case 2:
+		/* re-grid everything and forget saved spots */
+		for(n = 0; n < nicons; n++)
+			icons[n].pos = Pt(-1, -1);
+		savepositions();
 		deskiconredraw();
 		break;
 	case 3:
@@ -391,6 +632,7 @@ deskmenuactivate(Mousectl *mc)
 		break;
 	case 6:
 		emptybin();
+		deskiconredraw();
 		break;
 	case 8:
 		panellaunch("q9display");

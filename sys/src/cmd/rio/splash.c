@@ -475,6 +475,7 @@ splashthread(void*)
 		sendul(splashdone, 1);
 		sendul(splashdone, 1);
 		sendul(splashdone, 1);
+		sendul(splashdone, 1);
 		return;
 	}
 	if(getenv("q9splashslow") != nil){
@@ -494,6 +495,7 @@ splashthread(void*)
 	logonsetup(&lg, screen->r);
 	logon(&lg, clip);
 
+	sendul(splashdone, 1);
 	sendul(splashdone, 1);
 	sendul(splashdone, 1);
 	sendul(splashdone, 1);

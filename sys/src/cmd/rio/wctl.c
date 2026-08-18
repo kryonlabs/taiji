@@ -453,9 +453,11 @@ writewctl(WinTab *w, char *data)
 		if(!knowntheme(cmd.args))
 			return "unknown theme";
 		retheme(cmd.args);
+		panelballoon("Plan 9", smprint("Theme changed to %s", cmd.args));
 		return nil;
 	case Wallpaper:
 		setwallpaper(cmd.args);
+		panelballoon("Plan 9", smprint("Wallpaper set to %s", cmd.args));
 		return nil;
 	case Saver:
 		setsaver(atoi(cmd.args));

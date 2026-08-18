@@ -1365,6 +1365,13 @@ static char *monname[] = {
 	"July", "August", "September", "October", "November", "December"
 };
 
+static void balloonhide(void);
+
+static char balloonbuf[160];
+static ulong balloonms;
+static Rectangle balloonr;
+static Image *balloonbackup;
+
 static char lastclock[8];
 static Point hoverpt = { -1, -1 };
 static ulong hovermsec;
@@ -1452,6 +1459,10 @@ paneltick(void)
 	if(edge == PanelOff || screen == nil || Dx(screen->r) <= 0 || inlogon)
 		return;
 
+	if(balloonbuf[0] != 0 && mctl->msec > balloonms &&
+	   mctl->msec - balloonms >= 4000)
+		balloonhide();
+
 	tm = localtime(time(0));
 	snprint(clock, sizeof clock, "%02d:%02d", tm->hour, tm->min);
 	if(strcmp(clock, lastclock) != 0){
@@ -1461,7 +1472,7 @@ paneltick(void)
 	}
 
 	/* tooltips: show after the pointer rests on an element for a while */
-	if(menuopen || mctl->buttons != 0){
+	if(balloonbuf[0] != 0 || menuopen || mctl->buttons != 0){
 		hoverpt = Pt(-1, -1);
 		tiphide();
 		return;
@@ -1503,4 +1514,76 @@ paneltick(void)
 		hoverpt = mctl->xy;
 		hovermsec = mctl->msec;
 	}
+}
+
+/* ---- tray balloon tips ---- */
+
+void
+panelballoon(char *title, char *text)
+{
+	Image *back;
+	int w, i, lines;
+
+	if(edge == PanelOff || screen == nil)
+		return;
+	lines = text != nil && text[0] != 0 ? 2 : 1;
+	w = 0;
+	if(title != nil)
+		w = stringwidth(font, title);
+	if(text != nil){
+		i = stringwidth(font, text);
+		if(i > w)
+			w = i;
+	}
+	w += 44;
+	if(w > Dx(screen->r)-40)
+		w = Dx(screen->r)-40;
+
+	tiphide();	/* tooltips and balloons share the space above the panel */
+	if(balloonbackup){
+		draw(screen, balloonr, balloonbackup, nil, balloonr.min);
+		freeimage(balloonbackup);
+		balloonbackup = nil;
+		flushimage(display, 1);
+	}
+	balloonr = Rect(panelr.max.x - TrayWidth - 12 - w, panelr.min.y - (lines*font->height + 22) - 6,
+		panelr.max.x - TrayWidth - 12, panelr.min.y - 6);
+	if(balloonr.min.x < screen->r.min.x + 4)
+		balloonr = rectaddpt(balloonr, Pt(screen->r.min.x + 4 - balloonr.min.x, 0));
+
+	balloonbackup = allocimage(display, balloonr, screen->chan, 0, -1);
+	if(balloonbackup == nil)
+		return;
+	draw(balloonbackup, balloonr, screen, nil, balloonr.min);
+	back = getcolor(nil, 0xFFFFE1FF);
+	draw(screen, balloonr, back, nil, ZP);
+	/* stem toward the tray */
+	draw(screen, Rect(balloonr.max.x-14, balloonr.max.y, balloonr.max.x-4, balloonr.max.y+6), back, nil, ZP);
+	border(screen, balloonr, 1, display->black, ZP);
+	/* info dot */
+	ellipse(screen, Pt(balloonr.min.x+14, balloonr.min.y+16), 7, 7, 1, active, ZP);
+	string(screen, Pt(balloonr.min.x+11, balloonr.min.y+10), display->white, ZP, font, "i");
+	i = 0;
+	if(title != nil){
+		string(screen, Pt(balloonr.min.x+28, balloonr.min.y+8), display->black, ZP, font, title);
+		i = 1;
+	}
+	if(text != nil && text[0] != 0)
+		string(screen, Pt(balloonr.min.x+28, balloonr.min.y+10+i*(font->height+2)),
+			display->black, ZP, font, text);
+	snprint(balloonbuf, sizeof balloonbuf, "%s", title ? title : "");
+	balloonms = mctl->msec;
+	flushimage(display, 1);
+}
+
+static void
+balloonhide(void)
+{
+	if(balloonbackup){
+		draw(screen, balloonr, balloonbackup, nil, balloonr.min);
+		freeimage(balloonbackup);
+		balloonbackup = nil;
+		flushimage(display, 1);
+	}
+	balloonbuf[0] = 0;
 }
