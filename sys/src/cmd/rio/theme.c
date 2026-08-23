@@ -17,6 +17,7 @@ int tabsz = 18;
 int titlegradient;
 
 static Theme themes[] = {
+	{ "kryon", 4, 21, 20, 0, kryonwdecor, kryoninittheme },
 	{ "flat", 4, 18, 18, 0, flatwdecor, flatinittheme },
 	{ "simple", 4, 17, 18, 0, simplewdecor, simpleinittheme },
 	{ "win3", 4, 19, 23, 0, win3wdecor, win3inittheme },
@@ -24,7 +25,7 @@ static Theme themes[] = {
 	{ "win2k", 4, 19, 20, 1, win95wdecor, win95inittheme },
 };
 
-static Theme *theme = &themes[4];
+static Theme *theme = &themes[0];
 
 static void
 applytheme(Theme *t)
@@ -91,7 +92,7 @@ setwallpaper(char *name)
 	if(strcmp(name, "gradient") == 0){
 		for(i = 0; i < 32; i++)
 			draw(wp, Rect(r.min.x, r.min.y + Dy(r)*i/32, r.max.x, r.min.y + Dy(r)*(i+1)/32),
-				getcolor(nil, wlerp(0x3A6EA5FF, 0xA6CAF0FF, i, 31)), nil, ZP);
+				getcolor(nil, wlerp(kthemecolor("background"), kthemecolor("circle"), i, 31)), nil, ZP);
 	}else if(strcmp(name, "night") == 0){
 		draw(wp, r, display->black, nil, ZP);
 		seed = 12345;

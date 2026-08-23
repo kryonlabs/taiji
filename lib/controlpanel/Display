@@ -3,10 +3,23 @@ if(test -x /bin/q9display)
 	exec q9display
 echo Control Panel - Display
 echo
-echo Theme: win2k
+if(test -r $home/lib/kryon/theme){
+	name=`{sed -n 's/^name=//p' $home/lib/kryon/theme}
+	mode=`{sed -n 's/^mode=//p' $home/lib/kryon/theme}
+	style=`{sed -n 's/^style=//p' $home/lib/kryon/theme}
+}
+if(~ $#name 0)
+	name=Plan9
+if(~ $#mode 0)
+	mode=light
+if(~ $#style 0)
+	style=retro
+echo Theme: kryon ($style $name $mode)
 echo Resolution: $vgasize
 echo Font: `{basename $font}
-echo Desktop: classic teal
 echo
-echo Edit /usr/glenda/lib/profile to change the default session theme.
+echo 'Switch live with: echo ''style material'' > /dev/wctl'
+echo '                  echo ''palette ocean'' > /dev/wctl'
+echo '                  echo ''mode dark'' > /dev/wctl'
+echo '                  echo ''theme kryon:material:Plan9:dark'' > /dev/wctl'
 rc -i

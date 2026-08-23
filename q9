@@ -47,7 +47,7 @@ usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--
        ./q9 [--mini] [--raw] [--smp n] tty-run command
        ./q9 [--mini] [--raw] [--smp n] acme|rio [args...]
 
-Default mode boots Glenda's normal graphical Plan 9 profile.
+Default mode boots Glenda's normal graphical TaijiOS profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
 disabled by default because restored u9fs mounts can hang demand-loaded binaries.
 
@@ -56,7 +56,7 @@ Use --fresh to ignore an experimental checkpoint for this run.
 Set Q9_CHECKPOINT=1 to try experimental pre-rio checkpoint save/resume.
 Set Q9_BUILD_RIO=0 to skip rebuilding rio before graphical launch.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
-Plan 9 MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
+TaijiOS MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
 	exit "$status"
 }
@@ -205,6 +205,9 @@ write_preriorc()
 				printf 'q9splashslow=1\n'
 				printf 'export q9splashslow\n'
 			fi
+			printf 'echo q9: checking kryon\n'
+			printf 'cd /sys/src/kryon\n'
+			printf 'mk install\n'
 			printf 'echo q9: checking rio\n'
 			printf 'cd /sys/src/cmd/rio\n'
 			printf 'mk install\n'
@@ -439,7 +442,7 @@ wait_for_prompt()
 		sleep 1
 		i=$((i + 1))
 	done
-	echo "q9: timed out waiting for Plan 9 prompt; boot log follows" >&2
+	echo "q9: timed out waiting for TaijiOS prompt; boot log follows" >&2
 	tail -80 "$seriallog" >&2 || true
 	return 1
 }

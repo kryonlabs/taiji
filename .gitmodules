@@ -1,0 +1,4 @@
+[submodule "sys/src/kryon"]
+	path = sys/src/kryon
+	url = https://github.com/kryonlabs/kryon.git
+	branch = master

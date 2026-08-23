@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# menuchk.py FILE X1 Y1 X2 Y2: a win2k menu (gray face + black text) in region
+# menuchk.py FILE X1 Y1 X2 Y2: a kryon-themed menu (surface face + dark text)
 import sys
 f=open(sys.argv[1],'rb').read(); t=[];o=0
 while len(t)<4:
@@ -17,6 +17,6 @@ for y in range(y1,y2,2):
     for x in range(x1,x2,2):
         i=(y*w+x)*3
         r,g,b=px[i],px[i+1],px[i+2]
-        if abs(r-192)<14 and abs(g-192)<14 and abs(b-192)<14:
+        if abs(r-239)<20 and abs(g-239)<20 and abs(b-210)<25:
             gray+=1
 sys.exit(0 if gray>150 else 1)

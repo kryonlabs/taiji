@@ -28,13 +28,13 @@ dlgcolors(void)
 {
 	if(dface != nil)
 		return;
-	dface = getcolor(nil, 0xC0C0C0FF);
+	dface = getcolor("3d_face", 0xC0C0C0FF);
 	dhilite = getcolor(nil, 0xFFFFFFFF);
-	dshadow = getcolor(nil, 0x808080FF);
-	ddark = getcolor(nil, 0x000000FF);
-	dactive = getcolor(nil, 0x000080FF);
-	dnavy = getcolor(nil, 0x000080FF);
-	dtipback = getcolor(nil, 0xFFFFE1FF);
+	dshadow = getcolor("3d_shadow1", 0x808080FF);
+	ddark = getcolor("3d_shadow2", 0x000000FF);
+	dactive = getcolor("titlebar_active", 0x000080FF);
+	dnavy = getcolor("titlebar_active", 0x000080FF);
+	dtipback = getcolor("tipback", 0xFFFFE1FF);
 }
 
 /*
@@ -492,7 +492,7 @@ Redraw:
 	string(screen, Pt(dlg.min.x+58, dlg.min.y+34), ddark, ZP, font,
 		"Type the name of a program, folder or document,");
 	string(screen, Pt(dlg.min.x+58, dlg.min.y+50), ddark, ZP, font,
-		"and Plan 9 will open it for you.");
+		"and TaijiOS will open it for you.");
 	dlgentrydraw(entry, buf, blink);
 	panelbutton(ok, "OK", -1, 0);
 	panelbutton(cancel, "Cancel", -1, 0);
@@ -766,7 +766,7 @@ secudlg(void)
 	done = 0;
 	sel = -1;
 
-	dlgframe(dlg, "Plan 9 Security");
+	dlgframe(dlg, "TaijiOS Security");
 	string(screen, Pt(dlg.min.x+20, dlg.min.y+34), ddark, ZP, font,
 		"Logon Message");
 	for(i = 0; i < 5; i++){
@@ -856,7 +856,7 @@ lockscreen(void)
 	for(i = 0; i < 32; i++)
 		draw(screen, Rect(screen->r.min.x, screen->r.min.y + Dy(screen->r)*i/32,
 			screen->r.max.x, screen->r.min.y + Dy(screen->r)*(i+1)/32),
-			getcolor(nil, lglerp(0x3A6EA5FF, 0xA6CAF0FF, i, 31)), nil, ZP);
+			getcolor(nil, lglerp(kthemecolor("background"), kthemecolor("circle"), i, 31)), nil, ZP);
 
 	modalbegin();
 	kdown[0] = 0;

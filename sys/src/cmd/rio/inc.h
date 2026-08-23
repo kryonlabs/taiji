@@ -467,6 +467,21 @@ Image *getcolor(char *name, ulong defcol);
 Image *mkicon(char *px, int w, int h);
 Image *mkiconmask(char *px, int w, int h);
 
+/* kryon.c: Kryon-driven theme engine. Style, palette and mode all go
+ * through the real Kryon API; kthemecolor exposes the live palette to
+ * panel/dialog/splash as Plan 9 RGBA values. */
+void kryonwdecor(Window *w);
+void kryoninittheme(void);
+int kthemeapply(char *style, char *palette, char *mode);
+int kthemekryon(char *spec);
+int kstyleknown(char *name);
+int kpaletteknown(char *name);
+int kmodeknown(char *name);
+char *kthemename(void);
+char *kstylename(void);
+char *kmodename(void);
+ulong kthemecolor(char *key);
+
 void flatwdecor(Window *w);
 void flatwtitlectl(Window *w);
 void flatinittheme(void);

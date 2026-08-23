@@ -86,8 +86,8 @@ panelinit(void)
 	shadow = getcolor("3d_shadow1", 0x808080FF);
 	darkshadow = getcolor("3d_shadow2", 0x000000FF);
 	active = getcolor("titlebar_active", 0x000080FF);
-	menuback = getcolor(nil, 0xC0C0C0FF);
-	seltext = getcolor(nil, 0xFFFFFFFF);
+	menuback = getcolor("menuback", 0xC0C0C0FF);
+	seltext = getcolor("menuhtext", 0xFFFFFFFF);
 	yellow = getcolor(nil, 0xFFFF80FF);
 	green = getcolor(nil, 0x008000FF);
 	red = getcolor(nil, 0x800000FF);
@@ -672,13 +672,13 @@ lerpcolor(ulong c0, ulong c1, int i, int n)
 static void
 drawbanner(Rectangle strip)
 {
-	char *s = "Plan 9";
+	char *s = "TaijiOS";
 	char buf[2];
 	int i, y, w, h;
 
 	for(i = 0; i < Nbanner; i++)
 		if(banner[i] == nil)
-			banner[i] = getcolor(nil, lerpcolor(0x0A246AFF, 0xA6CAF0FF, i, Nbanner-1));
+			banner[i] = getcolor(nil, lerpcolor(kthemecolor("link"), kthemecolor("circle"), i, Nbanner-1));
 	h = Dy(strip);
 	for(i = 0; i < Nbanner; i++)
 		draw(screen, Rect(strip.min.x, strip.min.y + h*i/Nbanner,
@@ -1131,7 +1131,7 @@ shutreboot(void)
 /*
  * Modal dialog: what do you want to do? Blocks in the mouse thread
  * like menuhit does. All three choices end the session cleanly and
- * come back through the boot splash and logon screen (q9 disks are
+ * come back through the boot splash and logon screen (TaijiOS disks are
  * QEMU snapshots, there is nothing to flush).
  */
 void
@@ -1167,7 +1167,7 @@ Redraw:
 	winborder(screen, insetrect(dlg, 1), shadow, face);
 	draw(screen, title, active, nil, ZP);
 	string(screen, Pt(title.min.x+8, title.min.y+(Dy(title)-font->height)/2),
-		display->white, ZP, font, "Shut Down Plan 9");
+		display->white, ZP, font, "Shut Down TaijiOS");
 	string(screen, Pt(dlg.min.x+20, dlg.min.y+34),
 		display->black, ZP, font, "What do you want the computer to do?");
 	for(i = 0; i < Nshutopts; i++){
@@ -1498,7 +1498,7 @@ paneltick(void)
 				tipr = rectaddpt(tipr, Pt(screen->r.max.x - tipr.max.x, 0));
 			if(tipr.min.x < screen->r.min.x)
 				tipr = rectaddpt(tipr, Pt(screen->r.min.x - tipr.min.x, 0));
-			back = getcolor(nil, 0xFFFFE1FF);
+			back = getcolor("tipback", 0xFFFFE1FF);
 			tipbackup = allocimage(display, tipr, screen->chan, 0, -1);
 			if(tipbackup == nil)
 				return;
@@ -1555,7 +1555,7 @@ panelballoon(char *title, char *text)
 	if(balloonbackup == nil)
 		return;
 	draw(balloonbackup, balloonr, screen, nil, balloonr.min);
-	back = getcolor(nil, 0xFFFFE1FF);
+	back = getcolor("tipback", 0xFFFFE1FF);
 	draw(screen, balloonr, back, nil, ZP);
 	/* stem toward the tray */
 	draw(screen, Rect(balloonr.max.x-14, balloonr.max.y, balloonr.max.x-4, balloonr.max.y+6), back, nil, ZP);

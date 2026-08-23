@@ -1,6 +1,17 @@
 < /$objtype/mkfile
 
 TARG=rio
+KRYON=/sys/src/kryon
+CFLAGS=$CFLAGS -DKRYON_PLATFORM_PLAN9 \
+	-I$KRYON/src/platform/plan9/include -I$KRYON/include
+LIB=/$objtype/lib/libkryon.a /$objtype/lib/libstdio.a
+
+# kryon.c pulls the full Kryon header tree, whose conditionals need the
+# expression preprocessor; give it the same cpp pass the Kryon mkfile uses.
+kryon.$O: kryon.c inc.h
+	cpp -+ -I$KRYON/src/platform/plan9/include -I$KRYON/include -DKRYON_PLATFORM_PLAN9 kryon.c > kryon.i \
+	&& $CC $CFLAGS -c kryon.i && mv kryon.i.$O kryon.$O && rm -f kryon.i
+
 OFILES=\
 	main.$O \
 	text.$O \
@@ -18,6 +29,7 @@ OFILES=\
 	deskicon.$O \
 	splash.$O \
 	theme.$O \
+	kryon.$O \
 	flat.$O \
 	simple.$O \
 	win3.$O \

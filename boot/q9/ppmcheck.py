@@ -66,45 +66,50 @@ def main():
         n = sum(1 for x in range(45, 360) if pix(x, 100) == (255, 255, 255))
         sys.exit(0 if n > 200 else 1)
     if check == "logon_at":
-        # backdrop: win2k logon blue band near top; dialog grey at center
+        # backdrop: kryon plan9-light splash gradient (near #FFFFEA at top);
+        # logon dialog face = theme surface (~#EFEFD2) at center
         r, g, b = pix(100, 60)
         dr, dg, db = pix(512, 350)
-        sys.exit(0 if (30 <= r <= 90 and 90 <= g <= 140 and 140 <= b <= 200
-                       and abs(dr-dg) < 12 and abs(dg-db) < 12 and dr > 140) else 1)
+        sys.exit(0 if (r >= 230 and g >= 230 and 200 <= b <= 255
+                       and abs(dr-239) < 25 and abs(dg-239) < 25
+                       and abs(db-210) < 35) else 1)
     if check == "grey_at" or check == "not_grey_at":
+        # theme surface (#EFEFD2 for the kryon Plan9 light palette)
         x, y = int(sys.argv[3]), int(sys.argv[4])
         r, g, b = pix(x, y)
-        grey = abs(r-g) < 12 and abs(g-b) < 12 and r > 140
+        grey = abs(r-239) < 10 and abs(g-239) < 10 and abs(b-210) < 12
         sys.exit(0 if (grey == (check == "grey_at")) else 1)
     if check == "deskicon_at":
-        # desktop icons top-left: many pixels differ from teal wallpaper
+        # desktop icons top-left: many pixels differ from the kryon
+        # plan9-light wallpaper (#FFFFEA)
         n = 0
         for y in range(6, 110, 2):
             for x in range(10, 100, 2):
                 r, g, b = pix(x, y)
-                if abs(r-0) > 40 or abs(g-128) > 40 or abs(b-128) > 40:
+                if abs(r-255) > 40 or abs(g-255) > 40 or abs(b-234) > 40:
                     n += 1
         sys.exit(0 if n > 120 else 1)
     if check == "submenu_at":
-        # start menu programs submenu: white item text on gray face
+        # start menu programs submenu: black item text on the theme surface
         x1, y1, x2, y2 = map(int, sys.argv[3:7])
         nw = ng = 0
         for y in range(y1, y2, 2):
             for x in range(x1, x2, 2):
                 r, g, b = pix(x, y)
-                if r > 200 and g > 200 and b > 200:
+                if r < 60 and g < 60 and b < 60:
                     nw += 1
-                if abs(r-192) < 20 and abs(g-192) < 20 and abs(b-192) < 20:
+                if abs(r-239) < 25 and abs(g-239) < 25 and abs(b-210) < 35:
                     ng += 1
         sys.exit(0 if nw > 15 and ng > 200 else 1)
     if check == "rundlg_at":
-        # Run dialog: navy title strip, gray face, white entry field
+        # Run dialog: kryon accent title strip, theme surface face,
+        # near-background entry field
         r1, g1, b1 = pix(500, 310)
         r2, g2, b2 = pix(450, 345)
         r3, g3, b3 = pix(400, 400)
-        navy = r1 < 40 and g1 < 40 and 100 <= b1 <= 180
-        grey = abs(r2-g2) < 12 and abs(g2-b2) < 12 and r2 > 140
-        white = r3 > 220 and g3 > 220 and b3 > 220
+        navy = r1 < 40 and g1 < 60 and 90 <= b1 <= 200
+        grey = abs(r2-239) < 25 and abs(g2-239) < 25 and abs(b2-210) < 35
+        white = r3 > 220 and g3 > 220 and b3 > 200
         sys.exit(0 if navy and grey and white else 1)
     if check == "white_at":
         x, y = int(sys.argv[3]), int(sys.argv[4])
@@ -122,7 +127,17 @@ def main():
                 if r > 200 and g > 200 and b > 200:
                     sys.exit(0)
         sys.exit(1)
+    if check == "seg_face":
+        # theme surface (#EFEFD2) pixels - the kryon taskbar/panel face
+        x1, y1, x2, y2 = map(int, sys.argv[3:7])
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+                r, g, b = pix(x, y)
+                if abs(r-239) < 25 and abs(g-239) < 25 and abs(b-210) < 35:
+                    sys.exit(0)
+        sys.exit(1)
     if check == "seg_blue":
+        # kept for older win2k-era flows: win2k desktop blue pixels
         x1, y1, x2, y2 = map(int, sys.argv[3:7])
         for y in range(y1, y2):
             for x in range(x1, x2):

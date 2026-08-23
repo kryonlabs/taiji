@@ -14,6 +14,9 @@ enum
 	Screenoffset,
 	Screenrefresh,
 	Theme,
+	Style,
+	Palette,
+	Mode,
 	Wallpaper,
 	Saver,
 	New,
@@ -41,6 +44,9 @@ static char *cmds[] = {
 	[Screenoffset] = "screenoffset",
 	[Screenrefresh] = "refresh",
 	[Theme]	= "theme",
+	[Style]	= "style",
+	[Palette] = "palette",
+	[Mode]	= "mode",
 	[Wallpaper]	= "wallpaper",
 	[Saver]	= "saver",
 	[New]	= "new",
@@ -450,14 +456,43 @@ writewctl(WinTab *w, char *data)
 		refresh();
 		return nil;
 	case Theme:
+		if(cmd.args != nil && strncmp(cmd.args, "kryon", 5) == 0){
+			if(!kthemekryon(cmd.args))
+				return "unknown kryon theme";
+			retheme("kryon");
+			panelballoon("TaijiOS", smprint("Kryon theme: %s %s %s",
+				kstylename(), kthemename(), kmodename()));
+			return nil;
+		}
 		if(!knowntheme(cmd.args))
 			return "unknown theme";
 		retheme(cmd.args);
-		panelballoon("Plan 9", smprint("Theme changed to %s", cmd.args));
+		panelballoon("TaijiOS", smprint("Theme changed to %s", cmd.args));
+		return nil;
+	case Style:
+		if(cmd.args == nil || !kstyleknown(cmd.args))
+			return "unknown style (retro, material, system)";
+		kthemeapply(cmd.args, nil, nil);
+		retheme("kryon");
+		panelballoon("TaijiOS", smprint("Kryon style: %s", kstylename()));
+		return nil;
+	case Palette:
+		if(cmd.args == nil || !kpaletteknown(cmd.args))
+			return "unknown palette";
+		kthemeapply(nil, cmd.args, nil);
+		retheme("kryon");
+		panelballoon("TaijiOS", smprint("Kryon palette: %s", kthemename()));
+		return nil;
+	case Mode:
+		if(cmd.args == nil || !kmodeknown(cmd.args))
+			return "unknown mode (light, dark, system)";
+		kthemeapply(nil, nil, cmd.args);
+		retheme("kryon");
+		panelballoon("TaijiOS", smprint("Kryon mode: %s", kmodename()));
 		return nil;
 	case Wallpaper:
 		setwallpaper(cmd.args);
-		panelballoon("Plan 9", smprint("Wallpaper set to %s", cmd.args));
+		panelballoon("TaijiOS", smprint("Wallpaper set to %s", cmd.args));
 		return nil;
 	case Saver:
 		setsaver(atoi(cmd.args));

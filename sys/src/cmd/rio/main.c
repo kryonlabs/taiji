@@ -1203,7 +1203,7 @@ resthread(void*)
 /*
  * Screen saver, driven by the mouse thread's tick so no extra thread
  * is needed: after savermin minutes without input, blank the screen
- * and bounce the Plan 9 flag until something happens.
+ * and bounce the TaijiOS flag until something happens.
  */
 static void
 savercheck(void)
@@ -1726,7 +1726,7 @@ threadmain(int argc, char *argv[])
 	deskicondraw(fakebg);
 	paneldraw();
 	flushimage(display, 1);
-	panelballoon("Plan 9", "Welcome to Plan 9");
+	panelballoon("TaijiOS", "Welcome to TaijiOS");
 
 	startfs();
 

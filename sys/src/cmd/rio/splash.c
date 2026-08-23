@@ -1,7 +1,7 @@
 #include "inc.h"
 
 /*
- * Windows-2000-style boot splash, Plan 9 flavored: an ntldr-like
+ * Windows-2000-style boot splash, TaijiOS flavored: an ntldr-like
  * boot manager menu with countdown, then the animated segmented
  * progress bar while the desktop comes up.
  */
@@ -27,17 +27,17 @@ static int menutms = MenuTimeout*1000;
 static int nbarframes = Nframes;
 
 static char *bootstr[] = {
-	"Plan 9",
-	"Plan 9 (safe mode - no panel)",
+	"Start TaijiOS",
+	"Start TaijiOS Safe Mode",
 	nil,
 };
 
 static void
 splashcolors(Image **navy, Image **blue, Image **dim)
 {
-	*navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000080FF);
-	*blue = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x3A6EA5FF);
-	*dim = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x404040FF);
+	*navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, kthemecolor("link"));
+	*blue = allocimage(display, Rect(0,0,1,1), screen->chan, 1, kthemecolor("background"));
+	*dim = allocimage(display, Rect(0,0,1,1), screen->chan, 1, kthemecolor("bord"));
 }
 
 static Rectangle
@@ -60,9 +60,9 @@ drawmenu(int sel, Rectangle clip, int left)
 
 	draw(screen, clip, display->black, nil, ZP);
 	string(screen, Pt(clip.min.x+40, clip.min.y+34),
-		display->white, ZP, font, "Plan 9 Boot Manager");
+		display->white, ZP, font, "TaijiOS Boot Manager");
 	string(screen, Pt(clip.min.x+40, clip.min.y+52),
-		display->white, ZP, font, "pbm 1.0 - Plan 9 from Bell Labs");
+		display->white, ZP, font, "TaijiOS loader 1.0");
 	for(i = 0; bootstr[i]; i++){
 		Rectangle r = menurect(i, clip);
 		if(i == sel){
@@ -74,7 +74,7 @@ drawmenu(int sel, Rectangle clip, int left)
 				display->white, ZP, font, bootstr[i]);
 		}
 	}
-	snprint(buf, sizeof buf, "booting default in %d seconds", (left+999)/1000);
+	snprint(buf, sizeof buf, "starting TaijiOS in %d seconds", (left+999)/1000);
 	string(screen, Pt(clip.min.x+40, clip.max.y-60),
 		display->white, ZP, font, buf);
 	string(screen, Pt(clip.min.x+40, clip.max.y-40),
@@ -214,7 +214,7 @@ logondraw(Logon *lg, int blink)
 	title = Rect(lg->dlg.min.x+3, lg->dlg.min.y+3, lg->dlg.max.x-3, lg->dlg.min.y+24);
 	draw(screen, title, lgnavy, nil, ZP);
 	string(screen, Pt(title.min.x+8, title.min.y+(Dy(title)-font->height)/2),
-		display->white, ZP, font, "Log on to Plan 9");
+		display->white, ZP, font, "Log on to TaijiOS");
 
 	pt = Pt(lg->dlg.min.x+20, title.max.y+22);
 	string(screen, pt, display->black, ZP, font, "User name:");
@@ -274,7 +274,7 @@ logonbackdrop(Rectangle clip)
 	int i;
 
 	for(i = 0; i < 32; i++){
-		c = lerpcol(0x3A6EA5FF, 0xA6CAF0FF, i, 31);
+		c = lerpcol(kthemecolor("background"), kthemecolor("circle"), i, 31);
 		band = Rect(clip.min.x, clip.min.y + Dy(clip)*i/32,
 			clip.max.x, clip.min.y + Dy(clip)*(i+1)/32);
 		draw(screen, band, getcolor(nil, c), nil, ZP);
@@ -399,7 +399,7 @@ progressbar(Rectangle clip)
 {
 	Image *navy, *blue, *dim;
 	Rectangle bar;
-	char *s = "Starting Plan 9";
+	char *s = "Starting TaijiOS";
 	int i, w;
 
 	splashcolors(&navy, &blue, &dim);
@@ -450,9 +450,9 @@ splashlogout(void)
 	logonbackdrop(screen->r);	/* hide any late restore they do */
 	sleep(400);
 	logonsetup(&lg, screen->r);
-	lgface = getcolor(nil, 0xC0C0C0FF);
-	lgnavy = getcolor(nil, 0x000080FF);
-	lgdim = getcolor(nil, 0x808080FF);
+	lgface = getcolor("3d_face", 0xC0C0C0FF);
+	lgnavy = getcolor("titlebar_active", 0x000080FF);
+	lgdim = getcolor("3d_shadow1", 0x808080FF);
 	logon(&lg, screen->r);
 
 	modalend();
@@ -489,9 +489,9 @@ splashthread(void*)
 		panelsetedge("off");
 	progressbar(clip);
 
-	lgface = getcolor(nil, 0xC0C0C0FF);
-	lgnavy = getcolor(nil, 0x000080FF);
-	lgdim = getcolor(nil, 0x808080FF);
+	lgface = getcolor("3d_face", 0xC0C0C0FF);
+	lgnavy = getcolor("titlebar_active", 0x000080FF);
+	lgdim = getcolor("3d_shadow1", 0x808080FF);
 	logonsetup(&lg, screen->r);
 	logon(&lg, clip);
 
