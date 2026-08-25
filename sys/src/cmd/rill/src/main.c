@@ -76,6 +76,11 @@ typedef struct RillTestState {
     int ready_written;
 } RillTestState;
 
+typedef struct RillControlState {
+    char path[128];
+    long offset;
+} RillControlState;
+
 typedef enum RillPanelPluginKind {
     RILL_PANEL_SEPARATOR,
     RILL_PANEL_MENU,
@@ -628,6 +633,82 @@ open_launcher_id(RillShellState *shell, const RillPlatformServices *platform,
         RillShellSelectLauncher(shell, index);
         RillShellLaunchSelected(shell, platform);
     }
+}
+
+static void
+rill_control_init(RillControlState *control)
+{
+    FILE *file;
+
+    if(control == NULL)
+        return;
+    memset(control, 0, sizeof(*control));
+#ifdef KRYON_NATIVE_PLAN9
+    snprintf(control->path, sizeof(control->path), "/tmp/rillctl");
+    file = fopen(control->path, "w");
+    if(file != NULL)
+        fclose(file);
+    putenv("rillctl", control->path);
+    putenv("RILLCTL", control->path);
+#else
+    (void)file;
+#endif
+}
+
+static void
+rill_control_close(RillControlState *control)
+{
+    if(control == NULL)
+        return;
+#ifdef KRYON_NATIVE_PLAN9
+    if(control->path[0] != '\0')
+        remove(control->path);
+#endif
+}
+
+static void
+rill_control_process_line(RillShellState *shell,
+                          const RillPlatformServices *platform, char *line)
+{
+    int len;
+
+    if(shell == NULL || platform == NULL || line == NULL)
+        return;
+    len = (int)strlen(line);
+    while(len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' ||
+                      line[len - 1] == ' ' || line[len - 1] == '\t'))
+        line[--len] = '\0';
+    while(*line == ' ' || *line == '\t')
+        line++;
+    if(strcmp(line, "open kterm") == 0 || strcmp(line, "open terminal") == 0 ||
+       strcmp(line, "kterm") == 0 || strcmp(line, "terminal") == 0)
+        open_launcher_id(shell, platform, "terminal");
+}
+
+static void
+rill_control_poll(RillControlState *control, RillShellState *shell,
+                  const RillPlatformServices *platform)
+{
+#ifdef KRYON_NATIVE_PLAN9
+    FILE *file;
+    char line[160];
+
+    if(control == NULL || control->path[0] == '\0')
+        return;
+    file = fopen(control->path, "r");
+    if(file == NULL)
+        return;
+    if(control->offset > 0)
+        fseek(file, control->offset, SEEK_SET);
+    while(fgets(line, sizeof(line), file) != NULL)
+        rill_control_process_line(shell, platform, line);
+    control->offset = ftell(file);
+    fclose(file);
+#else
+    (void)control;
+    (void)shell;
+    (void)platform;
+#endif
 }
 
 static void
@@ -1381,6 +1462,7 @@ main(void)
     RillShellState shell;
     RillVisualState visuals;
     RillTestState test;
+    RillControlState control;
     const RillPlatformServices *platform;
     double next_refresh;
 
@@ -1389,6 +1471,7 @@ main(void)
     RillShellInit(&shell);
     RillShellRefresh(&shell, platform);
     RillShellSetStatus(&shell, "Ready");
+    rill_control_init(&control);
 
     SetSingleInstance(0);
     InitWindow(RILL_WIDTH, RILL_HEIGHT, "Rill");
@@ -1416,6 +1499,8 @@ main(void)
         }
         if(!test_scene_active(&test))
             process_window_mouse(&shell);
+        if(!test_scene_active(&test))
+            rill_control_poll(&control, &shell, platform);
 
         BeginDrawing();
         ClearBackground(opaque_color(GetThemeBackground()));
@@ -1461,6 +1546,7 @@ main(void)
             UnloadTexture(visuals.icons[i].texture);
     if(visuals.wallpaper_ready)
         UnloadTexture(visuals.wallpaper);
+    rill_control_close(&control);
     CloseWindow();
     return 0;
 }
