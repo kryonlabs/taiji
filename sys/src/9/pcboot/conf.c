@@ -294,7 +294,7 @@ parsemenu(char* str, char* scratch, int len)
 	}
 
 again:
-	print("\nPlan 9 Startup Menu:\n====================\n");
+	print("\nTaijiOS Boot Menu:\n==================\n");
 	for(i = 0; i < nmitem; i++)
 		print("    %d. %s\n", i+1, mitem[i].tag);
 	for(;;){

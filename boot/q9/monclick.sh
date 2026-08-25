@@ -46,6 +46,32 @@ monmove() {
 	sleep 0.4
 }
 
+# left click relative to the current cursor position; useful for menus that
+# would close if the cursor were homed before the click.
+monrelclick() {
+	_x=$1 _y=$2
+	{
+		while [ $_x -gt 127 ]; do
+			printf 'mouse_move 127 0\n'; _x=$((_x-127)); sleep 0.05
+		done
+		while [ $_x -lt -127 ]; do
+			printf 'mouse_move -127 0\n'; _x=$((_x+127)); sleep 0.05
+		done
+		while [ $_y -gt 127 ]; do
+			printf 'mouse_move 0 127\n'; _y=$((_y-127)); sleep 0.05
+		done
+		while [ $_y -lt -127 ]; do
+			printf 'mouse_move 0 -127\n'; _y=$((_y+127)); sleep 0.05
+		done
+		printf 'mouse_move %d %d\n' "$_x" "$_y"
+		sleep 0.3
+		printf 'mouse_button 1\n'
+		sleep 0.6
+		printf 'mouse_button 0\n'
+	} | socat - UNIX-CONNECT:$T/monitor.sock >/dev/null 2>&1
+	sleep 0.4
+}
+
 # right click at position
 monrclick() {
 	_x=$1 _y=$2

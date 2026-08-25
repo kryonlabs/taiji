@@ -1,12 +1,12 @@
 #!/bin/rc
-# Windows-2000 style shut down for the q9 VM.
+# Windows-2000 style shut down for the TaijiOS VM.
 # The disk is a QEMU snapshot and / is served over u9fs, so there is
 # nothing to flush: reboot gives a clean fresh boot through the
 # boot manager splash and logon screen.
 
 echo
 echo '  It is now safe to turn off your computer.'
-echo '  (rebooting this q9 VM instead)'
+echo '  (rebooting this TaijiOS VM instead)'
 echo
 sleep 2
 if(! echo reboot /386/9pc >/dev/reboot >[2]$home/lib/q9shut.err){

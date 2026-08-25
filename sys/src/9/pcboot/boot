@@ -39,4 +39,4 @@ ip
 
 port
 	int cpuserver = 1;
-	char hellomsg[] = "\nPlan 9 from Bell Labs PXE boot loader";
+	char hellomsg[] = "\nTaijiOS PXE boot loader";

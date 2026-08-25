@@ -2,3 +2,6 @@ This directory is used by the host-side `./q9` launcher.
 
 `./q9 run 'command'` writes a temporary `run.rc` here.  Glenda's profile
 sources that file when the guest boots with `q9mode=text`.
+
+`./q9 --kernel name` writes a temporary generated PXE profile under
+`cfg/pxe` while QEMU is starting, then removes it when the launcher exits.

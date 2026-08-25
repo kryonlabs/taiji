@@ -41,7 +41,7 @@ struct TreeItem {
 	Rectangle r;
 };
 
-Image *face, *light, *shadow, *dark, *white, *text, *hilite, *yellow, *blue, *navy, *green, *red;
+Image *face, *light, *shadow, *dark, *white, *text, *mutedtext, *hilite, *yellow, *blue, *navy, *seltext, *green, *red;
 Entry *ents;
 int nents;
 char cwd[Maxpath];
@@ -490,7 +490,7 @@ static McEnt mcents[] = {
 };
 
 static void
-static drawmcicon(Rectangle r, McEnt *e)
+drawmcicon(Rectangle r, McEnt *e)
 {
 	Point c;
 
@@ -539,7 +539,7 @@ static drawmcicon(Rectangle r, McEnt *e)
 }
 
 static void
-static mcopen(int i)
+mcopen(int i)
 {
 	char path[Maxpath];
 
@@ -557,7 +557,7 @@ static mcopen(int i)
 }
 
 static int
-static mcitemat(Point p)
+mcitemat(Point p)
 {
 	Rectangle lr, r;
 	int i, x, y;
@@ -582,7 +582,7 @@ static mcitemat(Point p)
 
 /* small message box with a single OK button */
 static void
-static msgbox(char *title, char *line)
+msgbox(char *title, char *line)
 {
 	Rectangle dlg, ok;
 	Event e;
@@ -717,7 +717,7 @@ redraw(void)
 				int w = stringwidth(font, ents[i].name);
 				draw(screen, Rect(row.min.x+(Dx(row)-w)/2-2, row.min.y+47,
 					row.min.x+(Dx(row)-w)/2+w+2, row.min.y+47+font->height+2), navy, nil, ZP);
-				string(screen, Pt(row.min.x+(Dx(row)-w)/2, row.min.y+48), white, ZP, font, ents[i].name);
+				string(screen, Pt(row.min.x+(Dx(row)-w)/2, row.min.y+48), seltext, ZP, font, ents[i].name);
 			}
 			x += Iconw + 14;
 			if(x+Iconw > lr.max.x-12){
@@ -740,13 +740,13 @@ redraw(void)
 		if(i == sel){
 			draw(screen, row, navy, nil, ZP);
 			drawfileicon(row, ents[i].isdir, 0);
-			string(screen, Pt(row.min.x+34, row.min.y+3), white, ZP, font, ents[i].name);
+			string(screen, Pt(row.min.x+34, row.min.y+3), seltext, ZP, font, ents[i].name);
 			if(ents[i].isdir)
 				snprint(buf, sizeof buf, "");
 			else
 				snprint(buf, sizeof buf, "%lld", ents[i].len);
-			string(screen, Pt(row.min.x+230, row.min.y+3), white, ZP, font, buf);
-			string(screen, Pt(row.min.x+320, row.min.y+3), white, ZP, font, ents[i].type);
+			string(screen, Pt(row.min.x+230, row.min.y+3), seltext, ZP, font, buf);
+			string(screen, Pt(row.min.x+320, row.min.y+3), seltext, ZP, font, ents[i].type);
 		}else{
 			drawfileicon(row, ents[i].isdir, 0);
 			string(screen, Pt(row.min.x+34, row.min.y+3), text, ZP, font, ents[i].name);
@@ -780,7 +780,7 @@ Status:
 static char *menutitles[] = { "File", "Edit", "View", "Help", nil };
 
 static void
-static menubar(Rectangle r)
+menubar(Rectangle r)
 {
 	int i, x;
 
@@ -792,7 +792,7 @@ static menubar(Rectangle r)
 }
 
 static int
-static menubarhit(Point p)
+menubarhit(Point p)
 {
 	Rectangle r;
 	int i, x;
@@ -826,13 +826,13 @@ expnewwin(void)
 }
 
 static void
-static aboutbox(void)
+aboutbox(void)
 {
-	msgbox("About Explorer", "Plan 9 Explorer - win2k style shell");
+	msgbox("About Explorer", "TaijiOS Explorer - Kryon themed shell");
 }
 
 static void
-static menubaractivate(int m, Point p)
+menubaractivate(int m, Point p)
 {
 	char *fitems[] = { "New Window", "New Folder", "-", "Close", nil };
 	char *eitems[] = { "Copy", "Cut", "Paste", "-", "Select All", nil };
@@ -1692,6 +1692,41 @@ openrowatsel(void)
 		openfile(path);
 }
 
+/*
+ * Theme colors: rio names its live Kryon theme palette images th_<key>
+ * in the shared draw device, so pick those up when present and fall back
+ * to stock colors otherwise.
+ */
+static Image*
+getthemed(char *name, ulong col)
+{
+	Image *ex;
+	char *n;
+
+	n = smprint("th_%s", name);
+	ex = n != nil ? namedimage(display, n) : nil;
+	free(n);
+	if(ex != nil)
+		return ex;
+	return allocimage(display, Rect(0,0,1,1), RGBA32, 1, col);
+}
+
+static void
+themeimages(void)
+{
+	face = getthemed("3d_face", 0xC0C0C0FF);
+	light = getthemed("3d_hilight2", 0xFFFFFFFF);
+	shadow = getthemed("3d_shadow1", 0x808080FF);
+	dark = getthemed("3d_shadow2", 0x000000FF);
+	white = getthemed("shell_surface", 0xFFFFFFFF);
+	text = getthemed("shell_text", 0x000000FF);
+	mutedtext = getthemed("shell_muted_text", 0x5F6368FF);
+	hilite = getthemed("high", 0xE8E8E8FF);
+	yellow = getthemed("circle", 0xF8D878FF);
+	navy = getthemed("shell_selection", 0x0B57D0FF);
+	seltext = getthemed("shell_selection_text", 0xFFFFFFFF);
+}
+
 void
 main(int argc, char **argv)
 {
@@ -1715,17 +1750,9 @@ main(int argc, char **argv)
 	cleanname(path);
 	if(initdraw(nil, nil, "explorer") < 0)
 		sysfatal("initdraw: %r");
-	face = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xC0C0C0FF);
-	light = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xFFFFFFFF);
-	shadow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x808080FF);
-	dark = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
-	white = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xFFFFFFFF);
-	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
-	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
-	yellow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xF8D878FF);
-	navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000080FF);
-	green = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x008000FF);
-	red = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xB00000FF);
+	themeimages();
+	green = allocimage(display, Rect(0,0,1,1), RGBA32, 1, 0x008000FF);
+	red = allocimage(display, Rect(0,0,1,1), RGBA32, 1, 0xB00000FF);
 	einit(Emouse|Ekeyboard);
 	if(loaddir(path) < 0)
 		sysfatal("open %s: %r", path);

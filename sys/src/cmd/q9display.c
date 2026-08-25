@@ -5,11 +5,11 @@
 #include <keyboard.h>
 
 /*
- * Windows-2000 style Display Properties: tabs for Background,
- * Screen Saver, Appearance and Settings. Background picks a rio
- * wallpaper, Appearance switches the window decoration theme, and
- * Screen Saver sets the idle timeout; all three talk to rio through
- * wctl messages. Settings is informational.
+ * Kryon-native Display Properties: tabs for Background, Screen Saver
+ * and Settings. Background picks a rio wallpaper, Screen Saver sets the
+ * idle timeout; both talk to rio through wctl messages. Appearance
+ * (theming) lives in the dedicated q9themes applet. Settings is
+ * informational.
  */
 
 enum {
@@ -17,13 +17,12 @@ enum {
 	Btnw = 74,
 	Btnh = 26,
 	Rowh = 20,
-	NTabs = 4,
+	NTabs = 3,
 };
 
 char *tabnames[NTabs] = {
 	"Background",
 	"Screen Saver",
-	"Appearance",
 	"Settings",
 };
 
@@ -32,15 +31,6 @@ char *wallpapers[] = {
 	"gradient",
 	"night",
 	"slate",
-	nil,
-};
-
-char *themes[] = {
-	"win2k",
-	"win95",
-	"win3",
-	"simple",
-	"flat",
 	nil,
 };
 
@@ -57,11 +47,10 @@ int savminutes[] = { 0, 1, 5, 10, 30 };
 
 Image *face, *light, *shadow, *dark, *white, *text, *hilite, *navy, *teal;
 int tab;
-int wallsel, themessel, savsel;
+int wallsel, savsel;
 int dirty;
 
 char curwall[64];
-char curtheme[64];
 int cursaver;
 
 static void
@@ -71,7 +60,6 @@ readcurrents(void)
 	int fd, n;
 
 	strecpy(curwall, curwall+sizeof curwall, "teal");
-	strecpy(curtheme, curtheme+sizeof curtheme, "win2k");
 	cursaver = 0;
 	home = getenv("home");
 	if(home == nil)
@@ -106,6 +94,21 @@ readcurrents(void)
 		free(path);
 	}
 	free(home);
+}
+
+/* look up a color rio published as a th_ named image, fall back to stock */
+static Image*
+thimg(char *name, ulong col)
+{
+	Image *ex;
+	char *n;
+
+	n = smprint("th_%s", name);
+	ex = n != nil ? namedimage(display, n) : nil;
+	free(n);
+	if(ex != nil)
+		return ex;
+	return allocimage(display, Rect(0,0,1,1), RGBA32, 1, col);
 }
 
 void
@@ -149,7 +152,6 @@ apply(void)
 	if(fd < 0)
 		return;
 	fprint(fd, "wallpaper %s", wallpapers[wallsel]);
-	fprint(fd, "theme %s", themes[themessel]);
 	fprint(fd, "saver %d", savminutes[savsel]);
 	close(fd);
 }
@@ -268,25 +270,6 @@ redraw(void)
 			"screen with a bouncing Plan 9 flag.");
 		break;
 	case 2:
-		string(screen, Pt(screen->r.min.x+30, screen->r.min.y+48), text, ZP, font, "Window theme:");
-		n = nelem(themes)-1;
-		listrects(lr, n);
-		for(i = 0; i < n; i++){
-			if(i == themessel){
-				draw(screen, lr[i], navy, nil, ZP);
-				string(screen, Pt(lr[i].min.x+6, lr[i].min.y+(Rowh-font->height)/2),
-					white, ZP, font, themes[i]);
-			}else{
-				bevel(lr[i], 1);
-				draw(screen, insetrect(lr[i], 1), white, nil, ZP);
-				string(screen, Pt(lr[i].min.x+6, lr[i].min.y+(Rowh-font->height)/2),
-					text, ZP, font, themes[i]);
-			}
-		}
-		string(screen, Pt(screen->r.min.x+280, screen->r.min.y+60), text, ZP, font,
-			"Applies to every window at once.");
-		break;
-	case 3:
 		string(screen, Pt(screen->r.min.x+30, screen->r.min.y+56), text, ZP, font, "Resolution:");
 		vg = getenv("vgasize");
 		snprint(buf, sizeof buf, "%s (fixed by vgasize)", vg ? vg : "unknown");
@@ -339,20 +322,20 @@ main(int argc, char **argv)
 	}ARGEND
 	if(initdraw(nil, nil, "q9display") < 0)
 		sysfatal("initdraw: %r");
-	face = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xC0C0C0FF);
-	light = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xFFFFFFFF);
-	shadow = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x808080FF);
-	dark = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
-	white = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xFFFFFFFF);
-	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000000FF);
-	hilite = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xE8E8E8FF);
-	navy = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x000080FF);
-	teal = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x008080FF);
+	/* follow the live Kryon theme rio publishes as th_ named images */
+	face = thimg("3d_face", 0xC0C0C0FF);
+	light = thimg("3d_hilight2", 0xFFFFFFFF);
+	shadow = thimg("3d_shadow1", 0x808080FF);
+	dark = thimg("3d_shadow2", 0x000000FF);
+	white = thimg("back", 0xFFFFFFFF);
+	text = thimg("text", 0x000000FF);
+	hilite = thimg("high", 0xE8E8E8FF);
+	navy = thimg("titlebar_active", 0x000080FF);
+	teal = thimg("circle", 0x008080FF);
 	einit(Emouse|Ekeyboard);
 
 	readcurrents();
 	wallsel = indexof(wallpapers, curwall);
-	themessel = indexof(themes, curtheme);
 	savsel = 0;
 	for(i = 0; i < nelem(savminutes); i++)
 		if(savminutes[i] == cursaver)
@@ -384,8 +367,7 @@ main(int argc, char **argv)
 					break;
 				}
 				/* list selection */
-				n = tab == 0 ? nelem(wallpapers)-1 : tab == 1 ? nelem(savers)-1 :
-					tab == 2 ? nelem(themes)-1 : 0;
+				n = tab == 0 ? nelem(wallpapers)-1 : tab == 1 ? nelem(savers)-1 : 0;
 				listrects(lr, n);
 				for(i = 0; i < n; i++)
 					if(ptinrect(e.mouse.xy, lr[i])){
@@ -393,8 +375,6 @@ main(int argc, char **argv)
 							wallsel = i;
 						else if(tab == 1)
 							savsel = i;
-						else if(tab == 2)
-							themessel = i;
 						redraw();
 						break;
 					}

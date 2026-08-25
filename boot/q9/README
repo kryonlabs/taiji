@@ -2,7 +2,7 @@ q9
 ==
 
 `./q9` starts this tree under QEMU and boots Glenda's normal graphical
-Plan 9 profile.
+TaijiOS profile.
 
 Examples:
 
@@ -10,26 +10,27 @@ Examples:
 	./q9 --text
 	./q9 tty
 	./q9 --smp 2
+	./q9 --kernel pc
+	./q9 --kernel /sys/src/9/pc/9pc
+	./q9 --rebuild-desktop
 	./q9 acme
-	./q9 lola -theme win95
-	./q9 run 'rio'
+	./q9 rill
+	./q9 run 'rill'
 	./q9 tty-run 'pwd; ls /sys/src/cmd'
-	./q9 run 'lola -theme win95'
-	./q9 run 'cd /sys/src/cmd/lola && mk install'
+	./q9 run 'cd /sys/src/cmd/rill && mk install'
 	./q9 --raw
 
 Use `./q9 tty`, `./q9 shell`, or `./q9 --text` when you want the q9
 shell-first profile.  That profile leaves you at `term%` on the serial
 stdio console instead of starting the window system at boot.
 
-From the Plan 9 prompt in tty mode, run `startwm`, `startlola`,
-`startrio`, `lola`, `rio`, `acme`, or any other command normally.  Use
-`./q9 lola`, `./q9 rio`, or `./q9 acme` when you want a graphical QEMU
-display from startup.  The `startwm` helper starts `lola` by default and
-falls back to `rio` if `lola` is unavailable:
+From the TaijiOS prompt in tty mode, run `startwm`, `rill`,
+`acme`, or any other command normally.  Use
+`./q9 rill` or `./q9 acme` when you want a graphical QEMU
+display from startup.  The `startwm` helper starts `rill` by default:
 
 	startwm
-	startwm rio
+	startwm rill
 	startwm acme
 
 The start helpers do not replace the shell, so exiting the graphical
@@ -39,24 +40,36 @@ The q9 PXE profile also sets `nousbboot=1` and `q9fast=1`, which skip
 boot and terminal startup work that is slow and not useful for this VM,
 such as USB probing, disk probing, DNS, timesync, and APM.
 
+Graphical q9 boots use the installed desktop binaries by default to keep
+startup fast.  Use `./q9 --rebuild-desktop` or set `Q9_BUILD_DESKTOP=1`
+when you want q9 to run `mk install` for Kryon, kterm, shelf, and rill
+before launching the desktop.
+
+Use `--kernel name` or `Q9_KERNEL=name` to boot a different installed 386
+kernel.  For example, `--kernel pc` resolves to `ether0!/386/9pc`, and
+`--kernel pcdisk` resolves to `ether0!/386/9pcdisk`.  Explicit boot paths
+are accepted too, such as `--kernel /sys/src/9/pc/9pc`.  q9 implements this
+with a temporary generated PXE profile, so the normal tracked text and GUI
+profiles stay unchanged.
+
 The q9 profiles set `q9unix=1`, which enables small shell conveniences in
 Glenda's profile: `ll`, `la`, `l`, `cdup`, `clear`, `cls`, `path`, and
 `which`.  It also appends APE tools to `/bin`, exposes `git/compat` as
 `git`, and adds helpers for web downloads.
 
-Run `q9setup` inside Plan 9 to see the bundled development tools.  APE,
+Run `q9setup` inside TaijiOS to see the bundled development tools.  APE,
 git, SSH, hget/webfs, archive tools, Ghostscript/page, VNC, and common
 text tools are already present in this tree.
 
-Run `q9deps` inside Plan 9 for optional internet-backed installs.  For
+Run `q9deps` inside TaijiOS for optional internet-backed installs.  For
 example, `q9deps go-bootstrap` downloads the official plan9/386 Go
 bootstrap archive, unpacks it under `/tmp`, binds its `bin` directory into
 `/bin`, and writes `$home/lib/go.rc` so future sessions can find it.  Use
 `q9deps clone url [dir]` to clone external git repositories with the
-bundled Plan 9 git wrapper.
+bundled git wrapper.
 
 Use `--smp n` or `Q9_SMP=n` to expose multiple CPUs to QEMU.  q9 keeps
-Plan 9 MP disabled with `*nomp=1` for now because this PC kernel can panic
+TaijiOS MP disabled with `*nomp=1` for now because this PC kernel can panic
 under QEMU during LAPIC clock calibration.  This keeps normal boot stable.
 
 Use `--raw` when you want to see the BIOS/kernel boot log or when running

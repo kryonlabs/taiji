@@ -1,6 +1,6 @@
 #!/bin/sh
-# Headless GUI smoke test for the rio panel + boot splash.
-# Boots the q9 VM, drives it with VNC clicks, pixel-checks screendumps.
+# Headless GUI smoke test for the Rill desktop + boot splash.
+# Boots the TaijiOS VM, drives it with VNC clicks, pixel-checks screendumps.
 
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
@@ -12,8 +12,19 @@ ok()   { echo "PASS: $1"; pass=$((pass+1)); }
 bad()  { echo "FAIL: $1"; fail=$((fail+1)); }
 check() { if python3 $T/ppmcheck.py "$@"; then return 0; else return 1; fi; }
 
+reset_theme() {
+	mkdir -p usr/glenda/lib/kryon lib/kryon
+	printf 'name=Default\nmode=light\nstyle=material\n' >usr/glenda/lib/kryon/theme
+	printf 'name=Default\nmode=light\nstyle=material\n' >lib/kryon/system-theme
+	printf 'tiles\n' >usr/glenda/lib/wallpaper
+}
+
+log_clean() {
+	! grep -E 'panic|suicide|sys: trap|double-free|write error|allocb' $T/qemu.log >/dev/null 2>&1
+}
+
 fastshot() {
-	printf 'screendump /home/wao/Projects/plan9/boot/q9/%s.ppm\n' "$1" \
+	printf 'screendump %s/boot/q9/%s.ppm\n' "$root" "$1" \
 		| socat - UNIX-CONNECT:$T/monitor.sock >>$T/screendump.err 2>&1
 }
 
@@ -55,7 +66,7 @@ wait_bar() {
 	i=0
 	while [ $i -lt 100 ]; do
 		fastshot bar
-		if [ -s $T/bar.ppm ] && check $T/bar.ppm seg_blue 380 370 640 400; then
+		if [ -s $T/bar.ppm ] && check $T/bar.ppm seg_face 380 370 640 400; then
 			return 0
 		fi
 		sleep 0.1
@@ -67,7 +78,7 @@ wait_bar() {
 # poll fast until the logon dialog is up (blue backdrop, grey dialog)
 wait_login() {
 	i=0
-	while [ $i -lt 60 ]; do
+	while [ $i -lt 100 ]; do
 		fastshot login
 		if [ -s $T/login.ppm ] && check $T/login.ppm logon_at; then
 			return 0
@@ -79,6 +90,7 @@ wait_login() {
 }
 
 echo "== boot 1: splash menu + progress bar =="
+reset_theme
 boot_vm
 if wait_menu; then
 	ok "boot manager menu renders (black, white text)"
@@ -97,18 +109,27 @@ if wait_login; then
 else
 	bad "logon dialog renders"
 fi
-# click OK (dialog ~380x210 centered; OK button at ~512,443)
-monclick 512 443
+# Press Enter instead of clicking a resolution-dependent OK button.
+monkey ret
 sleep 2
 
-echo "== boot 1: desktop + start menu =="
+echo "== boot 1: Rill desktop + start menu =="
 sleep 8
 fastshot desk
 sleep 1
 if check $T/desk.ppm grey_at 500 754; then
-	ok "taskbar panel present at bottom"
+	ok "desktop panel present"
 else
-	bad "taskbar panel present at bottom"
+	bad "desktop panel present"
+fi
+monmove 400 300
+sleep 1
+fastshot cursor
+sleep 1
+if check $T/cursor.ppm cursor_win2000 400 300; then
+	ok "Windows 2000 style cursor renders"
+else
+	bad "Windows 2000 style cursor renders"
 fi
 monclick 40 754
 sleep 1
@@ -127,6 +148,11 @@ if check $T/dicons.ppm deskicon_at; then
 	ok "desktop icons render"
 else
 	bad "desktop icons render"
+fi
+if [ -x 386/bin/inbe ] && sed -n '1p' lib/q9/desktop | grep -q '^Inner Breeze	inbe	inbe$'; then
+	ok "Inner Breeze is preinstalled on desktop"
+else
+	bad "Inner Breeze is preinstalled on desktop"
 fi
 
 echo "== boot 1: programs submenu populated =="
@@ -150,12 +176,15 @@ if check $T/rund.ppm rundlg_at; then
 else
 	bad "run dialog opens with entry field"
 fi
-monkey esc
+monclick 585 427
 sleep 1
 
-echo "== boot 1: ctrl+shift+esc task manager =="
-. $root/boot/q9/monclick.sh
-monkey ctrl-alt-shift-esc
+echo "== boot 1: start menu task manager =="
+monclick 40 754
+sleep 1
+monmove 100 640
+sleep 1
+monrelclick 170 25
 sleep 4
 fastshot tmg
 sleep 1
@@ -180,7 +209,71 @@ fi
 monclick 900 200
 sleep 1
 
-echo "== boot 2: safe mode disables panel =="
+echo "== boot 1: Inner Breeze desktop launch =="
+mondblclick 52 28
+sleep 8
+fastshot inbe
+sleep 1
+if check $T/inbe.ppm window_title_at 40 60 760 120; then
+	ok "Inner Breeze launches from desktop icon"
+else
+	bad "Inner Breeze launches from desktop icon"
+fi
+if log_clean; then
+	ok "boot 1 log has no panic or trap"
+else
+	bad "boot 1 log has no panic or trap"
+fi
+
+echo "== boot 2: themes app live apply =="
+reset_theme
+boot_vm
+if wait_login; then
+	ok "themes boot logon dialog renders"
+else
+	bad "themes boot logon dialog renders"
+fi
+monkey ret
+sleep 10
+monclick 40 754
+sleep 1
+monmove 100 585
+sleep 1
+monrelclick 170 168
+sleep 3
+fastshot themes
+sleep 1
+if check $T/themes.ppm q9themes_no_plan9 &&
+	! grep -q 'Plan9' sys/src/cmd/q9themes/q9themes.c; then
+	ok "themes app hides Plan9 palette"
+else
+	bad "themes app hides Plan9 palette"
+fi
+monclick 148 168
+sleep 1
+monclick 515 446
+sleep 3
+fastshot themeo
+sleep 1
+if check $T/themeo.ppm ocean_background_at 900 600; then
+	ok "themes app Apply repaints running desktop"
+else
+	bad "themes app Apply repaints running desktop"
+fi
+if grep -q '^name=Ocean$' usr/glenda/lib/kryon/theme &&
+	grep -q '^name=Ocean$' lib/kryon/system-theme; then
+	ok "themes app persists Ocean as system theme"
+else
+	bad "themes app persists Ocean as system theme"
+fi
+if log_clean; then
+	ok "boot 2 log has no panic or trap"
+else
+	bad "boot 2 log has no panic or trap"
+fi
+
+echo "== boot 3: safe mode disables panel =="
+reset_theme
 boot_vm
 if wait_menu; then
 	monclick 200 126 || true
@@ -192,11 +285,17 @@ if wait_menu; then
 	else
 		bad "safe mode: no panel at bottom"
 	fi
+	if log_clean; then
+		ok "boot 3 log has no panic or trap"
+	else
+		bad "boot 3 log has no panic or trap"
+	fi
 else
 	bad "safe mode: boot menu never appeared"
 fi
 
 pkill -f '^qemu-system-x86_64' 2>/dev/null || true
-rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm $T/bar.ok $T/dicons.ppm $T/subm.ppm $T/rund.ppm $T/tmg.ppm $T/dmenu.ppm
+reset_theme
+rm -f $T/menu.ppm $T/bar.ppm $T/desk.ppm $T/start.ppm $T/safe.ppm $T/login.ppm $T/bar.ok $T/dicons.ppm $T/inbe.ppm $T/subm.ppm $T/rund.ppm $T/tmg.ppm $T/dmenu.ppm $T/themes.ppm $T/themeo.ppm
 echo "== results: $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]

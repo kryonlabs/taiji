@@ -9,7 +9,7 @@ sleep 0.5
 rm -f $T/monitor.sock $T/m1.ppm $T/m2.ppm $T/m3.ppm $T/dbg.err
 setsid ./q9 --raw --headless gui >$T/qemu.log 2>&1 &
 shot() {
-	printf 'screendump /home/wao/Projects/plan9/boot/q9/%s.ppm\n' "$1" \
+	printf 'screendump /home/wao/Projects/taiji/boot/q9/%s.ppm\n' "$1" \
 		| socat - UNIX-CONNECT:$T/monitor.sock >>$T/dbg.err 2>&1
 }
 # wait for boot menu

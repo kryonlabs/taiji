@@ -1,7 +1,7 @@
 bootfile=ether0!/386/9pc
 fs=10.0.2.1
 auth=10.0.2.1
-sysname=q9
+sysname=taiji
 *nobiosload=1
 partition=new
 factotumopts=-n

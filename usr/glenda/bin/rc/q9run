@@ -1,11 +1,11 @@
 #!/bin/rc
-# Windows-2000 style Run... for rio: read a command, open it in a
-# new window via wctl.
+# Windows-2000 style Run... for the TaijiOS desktop: read a command,
+# then open it in a new window via wctl.
 
-echo 'Type the name of a program, and Plan 9 will open it for you.'
+echo 'Type the name of a program, and TaijiOS will open it for you.'
 echo -n 'Run: '
 cmd=`{read}
 if(! ~ $#cmd 0)
-	echo new $cmd >/dev/wctl
+	window $cmd
 if not
 	echo 'q9run: no command given' >[1=2]

@@ -2,7 +2,7 @@
 # Self-contained verification: boots the VM, drives it via monitor
 # injection, pixel-checks the new shell features, kills the VM.
 set -u
-cd /home/wao/Projects/plan9
+cd /home/wao/Projects/taiji
 T=boot/q9
 . $T/monclick.sh
 pass=0; fail=0
@@ -10,7 +10,7 @@ ok() { echo "PASS: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 check() { python3 $T/ppmcheck.py "$@"; }
 shot() {
-	printf 'screendump /home/wao/Projects/plan9/boot/q9/%s.ppm\n' "$1" \
+	printf 'screendump /home/wao/Projects/taiji/boot/q9/%s.ppm\n' "$1" \
 		| socat - UNIX-CONNECT:$T/monitor.sock >/dev/null 2>&1
 	sleep 1
 }

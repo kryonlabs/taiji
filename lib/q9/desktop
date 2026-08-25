@@ -1,3 +1,5 @@
+Inner Breeze	inbe	inbe
+Themes	q9themes	ctl
 My Computer	explorer /mycomputer	comp
 My Documents	explorer /usr/glenda	doc
 Recycle Bin	explorer $home/.trash	bin

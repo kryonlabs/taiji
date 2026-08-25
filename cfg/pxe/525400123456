@@ -1,8 +1,8 @@
 [menu]
-menuitem=1920x1080, Plan 9 1920x1080
-menuitem=1440x900, Plan 9 1440x900
-menuitem=1280x768, Plan 9 1280x768
-menuitem=text, Plan 9 Text Mode
+menuitem=1920x1080, TaijiOS 1920x1080
+menuitem=1440x900, TaijiOS 1440x900
+menuitem=1280x768, TaijiOS 1280x768
+menuitem=text, TaijiOS Text Mode
 
 [1920x1080]
 vgasize=1920x1080x32
@@ -21,7 +21,7 @@ debugboot=1
 bootfile=ether0!/386/9pc
 fs=10.0.2.1
 auth=10.0.2.1
-sysname=gnot
+sysname=taiji
 *nobiosload=1
 partition=new
 factotumopts=-n

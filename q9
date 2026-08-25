@@ -9,6 +9,7 @@ state=boot/q9
 rundir=cfg/q9
 runrc=$rundir/run.rc
 predesktoprc=$rundir/predesktop.rc
+kernelpxe=
 seriallog=$state/serial.log
 serialsock=$root/$state/serial.sock
 monitorsock=$root/$state/monitor.sock
@@ -33,7 +34,9 @@ boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
 autosave=${Q9_CHECKPOINT:-0}
-builddesktop=${Q9_BUILD_DESKTOP:-1}
+builddesktop=${Q9_BUILD_DESKTOP:-0}
+kernel=${Q9_KERNEL:-}
+kernelmac=${Q9_KERNEL_MAC:-52:54:00:12:34:59}
 fresh=false
 hadsession=false
 headless=false
@@ -42,10 +45,10 @@ usage()
 {
 	status=${1:-1}
 	cat >&2 <<EOF
-usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--smp n] [console|shell|tty|gui]
-       ./q9 [--text] [--mini] [--raw] [--smp n] run command
-       ./q9 [--mini] [--raw] [--smp n] tty-run command
-       ./q9 [--mini] [--raw] [--smp n] acme|rill [args...]
+usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--rebuild-desktop] [--kernel name|path] [--smp n] [console|shell|tty|gui]
+       ./q9 [--text] [--mini] [--raw] [--rebuild-desktop] [--kernel name|path] [--smp n] run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] tty-run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] acme|rill [args...]
 
 Default mode boots Glenda's normal graphical TaijiOS profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
@@ -54,7 +57,8 @@ disabled by default because restored u9fs mounts can hang demand-loaded binaries
 Use --text, tty, or shell to boot a clean rc console on QEMU serial stdio.
 Use --fresh to ignore an experimental checkpoint for this run.
 Set Q9_CHECKPOINT=1 to try experimental pre-desktop checkpoint save/resume.
-Set Q9_BUILD_DESKTOP=0 to skip rebuilding desktop tools before graphical launch.
+Use --rebuild-desktop or Q9_BUILD_DESKTOP=1 to rebuild desktop tools before graphical launch.
+Use --kernel name or Q9_KERNEL=name to boot /386/9name, or pass an explicit path.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 TaijiOS MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
@@ -99,6 +103,19 @@ while [ $# -gt 0 ]; do
 	--checkpoint)
 		autosave=1
 		shift
+		;;
+	--rebuild-desktop)
+		builddesktop=1
+		shift
+		;;
+	--no-rebuild-desktop)
+		builddesktop=0
+		shift
+		;;
+	--kernel)
+		[ $# -ge 2 ] || usage
+		kernel=$2
+		shift 2
 		;;
 	--smp)
 		[ $# -ge 2 ] || usage
@@ -163,6 +180,83 @@ fi
 if [ "$mode" = run ] && [ "$raw" != true ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
 	raw=true
 fi
+basemac=$mac
+if [ "$kernel" ]; then
+	mac=$kernelmac
+fi
+
+pxe_id()
+{
+	printf '%s\n' "$1" | tr -d ':' | tr 'ABCDEF' 'abcdef'
+}
+
+resolve_kernel_bootfile()
+{
+	k=$1
+	case "$k" in
+	*!*)
+		bootfile=$k
+		;;
+	/*)
+		bootfile=ether0!"$k"
+		;;
+	*/*)
+		bootfile=ether0!/"$k"
+		;;
+	9*)
+		bootfile=ether0!/386/"$k"
+		;;
+	*)
+		bootfile=ether0!/386/9"$k"
+		;;
+	esac
+	path=${bootfile#*!}
+	case "$path" in
+	/*)
+		hostpath=$root$path
+		;;
+	*)
+		hostpath=$root/$path
+		;;
+	esac
+	if [ ! -r "$hostpath" ]; then
+		echo "q9: kernel not found for $k: $hostpath" >&2
+		exit 1
+	fi
+	printf '%s\n' "$bootfile"
+}
+
+write_kernel_pxe()
+{
+	[ "$kernel" ] || return 0
+	bootfile=$(resolve_kernel_bootfile "$kernel")
+	src=cfg/pxe/$(pxe_id "$basemac")
+	kernelpxe=cfg/pxe/$(pxe_id "$mac")
+	if [ "$src" = "$kernelpxe" ]; then
+		echo "q9: Q9_KERNEL_MAC must differ from the base q9 MAC" >&2
+		exit 1
+	fi
+	if [ ! -r "$src" ]; then
+		echo "q9: base PXE profile not found: $src" >&2
+		exit 1
+	fi
+	tmp=$kernelpxe.$$
+	awk -v bootfile="$bootfile" '
+		BEGIN { done = 0 }
+		/^bootfile=/ && done == 0 {
+			print "bootfile=" bootfile
+			done = 1
+			next
+		}
+		{ print }
+		END {
+			if(done == 0)
+				print "bootfile=" bootfile
+		}
+	' "$src" >"$tmp"
+	mv "$tmp" "$kernelpxe"
+	echo "q9: using kernel $kernel ($bootfile)" >&2
+}
 
 build_u9fs()
 {
@@ -193,6 +287,9 @@ write_runrc()
 clear_runrc()
 {
 	rm -f "$runrc" "$runrc".* "$predesktoprc" "$predesktoprc".*
+	if [ "${kernelpxe:-}" ]; then
+		rm -f "$kernelpxe" "$kernelpxe".*
+	fi
 }
 
 write_predesktoprc()
@@ -204,6 +301,7 @@ write_predesktoprc()
 			if [ "${Q9_TEST:-0}" = 1 ]; then
 				printf 'q9splashslow=1\n'
 			fi
+			printf 'echo q9: rebuilding desktop tools\n'
 			printf 'echo q9: checking kryon\n'
 			printf 'cd /sys/src/kryon\n'
 			printf 'mk install\n'
@@ -220,6 +318,9 @@ write_predesktoprc()
 	else
 		{
 			printf '#!/bin/rc\n'
+			if [ "$profile" = true ] && [ "$textonly" != true ]; then
+				printf 'echo q9: using installed desktop tools\n'
+			fi
 		} >"$tmp"
 	fi
 	mv "$tmp" "$predesktoprc"
@@ -414,6 +515,7 @@ qemu_common()
 
 run_foreground()
 {
+	write_kernel_pxe
 	build_u9fs
 	if [ "$textonly" = true ]; then
 		qemu_common -display none -serial stdio
@@ -469,6 +571,7 @@ run_clean()
 	if [ "$profile" = true ] && [ "$textonly" != true ]; then
 		write_predesktoprc
 	fi
+	write_kernel_pxe
 	build_u9fs
 	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"
 	hadsession=false
@@ -536,6 +639,7 @@ case "$mode" in
 console|shell)
 	clear_runrc
 	if [ "$raw" = true ]; then
+		trap clear_runrc EXIT HUP INT TERM
 		write_predesktoprc
 		run_foreground
 	else

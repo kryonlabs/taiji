@@ -19,7 +19,7 @@ fn have {
 		echo 'ok	'$1
 }
 
-echo 'q9 userspace'
+echo 'TaijiOS userspace'
 echo '============'
 echo
 

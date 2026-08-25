@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send keys to the q9 VM via VNC. usage: vncsend.py KEY [KEY...]
+"""Send keys to the TaijiOS VM via VNC. usage: vncsend.py KEY [KEY...]
 KEY is a character (a, b, ...) or a name: ret, spc, bks, tab, esc."""
 import socket, sys, time
 

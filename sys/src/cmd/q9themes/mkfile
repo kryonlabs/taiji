@@ -1,0 +1,11 @@
+< /$objtype/mkfile
+
+TARG=q9themes
+LIB=/$objtype/lib/libstdio.a
+
+OFILES=\
+	q9themes.$O
+
+BIN=/$objtype/bin
+
+</sys/src/cmd/mkone

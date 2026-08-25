@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Click at (x,y) on the q9 VM via VNC using gvnc (real client stack).
+"""Click at (x,y) on the TaijiOS VM via VNC using gvnc (real client stack).
 usage: gvncclick.py x y"""
 import sys, time
 import gi

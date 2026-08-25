@@ -1,5 +1,6 @@
 Acme	acme	acme
-Rio Terminal	rc	term
+Terminal	kterm	term
+Inner Breeze	inbe	inbe
 Explorer	explorer /	folder
 Jot (Notepad)	jot	jot
 Stats	stats -lmisce	stats
@@ -8,3 +9,4 @@ Sokoban	games/sokoban	game
 Life	games/life	game
 Mahjongg	games/mahjongg	game
 Sudoku	games/sudoku	game
+Themes	q9themes	ctl
