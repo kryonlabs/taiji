@@ -42,7 +42,7 @@ such as USB probing, disk probing, DNS, timesync, and APM.
 
 Graphical q9 boots use the installed desktop binaries by default to keep
 startup fast.  Use `./q9 --rebuild-desktop` or set `Q9_BUILD_DESKTOP=1`
-when you want q9 to run `mk install` for Kryon, Kapsule, Shelf, and Rill
+when you want q9 to run `mk install` for Kryon, ktrem, Shelf, and Rill
 before launching the desktop.
 
 Use `--kernel name` or `Q9_KERNEL=name` to boot a different installed 386

@@ -1,7 +1,7 @@
 Rill is the default TaijiOS desktop in this tree.
 
 Use the desktop menu or the Run command to open bundled programs.
-Kapsule opens the terminal, and startwm starts Rill by default.
+ktrem opens the terminal, and startwm starts Rill by default.
 
 From a text prompt you can run startwm, rill, acme, or any other command
 normally.
