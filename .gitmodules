@@ -11,3 +11,7 @@
 [submodule "sys/src/shelf"]
 	path = sys/src/shelf
 	url = https://github.com/kryonlabs/shelf.git
+[submodule "sys/src/cmd/rill"]
+	path = sys/src/cmd/rill
+	url = https://github.com/kryonlabs/rill.git
+	branch = master
