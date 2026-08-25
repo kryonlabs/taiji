@@ -662,4 +662,3 @@ kryoninittheme(void)
 	kbtnmask[2] = mkiconmask(krstbtn, 16, 14);
 	kbtnmask[3] = mkiconmask(kclosebtn, 16, 14);
 }
-

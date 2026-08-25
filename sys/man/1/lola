@@ -48,15 +48,19 @@ The
 and
 .B -theme
 options select the window decoration theme.
-The available themes are
-.BR flat ,
-.BR simple ,
-.BR win3 ,
+TaijiOS is Kryon-native: the only theme is
+.BR kryon ,
+which draws every window, the taskbar and the menus from the
+system Kryon theme engine. The style, palette and light/dark mode
+are switched live through
+.B wctl
+.RB ( style ,
+.B palette
 and
-.BR win95 .
-If no theme is specified,
-.B simple
-is used.
+.B mode
+messages) or the
+.I q9themes
+control panel applet.
 .PP
 .I Lola
 supports the usual

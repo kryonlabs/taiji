@@ -33,11 +33,11 @@ After that had been more or less achieved some new features were implemented:
 		click new window or background
 	- 'newtab' wctl message
 	- 'new -id n' attach name
-- win2k shell extras
+- Kryon-native desktop shell
 	- desktop icons from /lib/q9/desktop and $home/lib/desktop
 	  (label<TAB>command[<TAB>icon]); single click selects,
 	  double click launches; button 3 on the desktop opens the
-	  win2k context menu (the classic rio menu is on the 1-2 chord)
+	  desktop context menu (the classic rio menu is on the 1-2 chord)
 	- Start menu Programs/Documents lists from /lib/q9/programs
 	  and $home/lib/recent
 	- Run dialog with history ($home/lib/runhist)
@@ -46,24 +46,31 @@ After that had been more or less achieved some new features were implemented:
 	  manager), Ctrl+Shift+Esc task manager
 	- taskbar: button 3 on a task button opens the window system
 	  menu, tooltips, ticking clock, double click opens a calendar
-	- wctl "theme NAME", "wallpaper NAME", "saver MINUTES"
+	- wctl "theme kryon:STYLE:PALETTE:MODE", "style NAME",
+	  "palette NAME", "mode NAME", "wallpaper NAME", "saver MINUTES"
 	- screen saver: bouncing flag after the idle timeout
 - misc
 	- 1-3 chord on desktop opens secondary menu
 
 # Themes
 
-The window decoration theme is selected at startup:
+Window decorations and the whole desktop are drawn by the system Kryon
+theme engine (libkryon). At startup rio is simply itself:
 
-	rio -theme win95
+	rio -theme kryon
 
 The short option is also supported:
 
-	rio -T win95
+	rio -T kryon
 
-The options are: flat, simple, win3, win95.
+Switch live through wctl:
 
-# Color schemes
+	echo style material > /dev/wctl
+	echo palette Ocean  > /dev/wctl
+	echo mode dark      > /dev/wctl
+	echo theme kryon:material:Ocean:dark > /dev/wctl
 
-Some color schemes for the simple theme can be found here:
-http://aap.papnet.eu/pub/plan9/themes/Themes.html
+Styles: retro, material. Palettes: the Kryon theme catalog (Sky, Ocean,
+Forest, Sunset, Lavender, Cherry, Dawn, Sage, Sepia, Default, Mint,
+Cobalt, Plan9). Modes: light, dark. The q9themes control panel applet
+drives all of it with a live preview.

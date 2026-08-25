@@ -349,6 +349,8 @@ void borderBR(Image *img, Rectangle r, Image *c);
 void winborder(Image *img, Rectangle r, Image *c1, Image *c2);
 
 void refresh(void);
+void rebuilddesktop(void);
+void repaintdesktop(void);
 void sweep(Window *w);
 Point dmenuhit(int but, Mousectl *mc, int nx, int ny, Point last);
 void drainmouse(Mousectl *mc, WinTab *w);
@@ -394,6 +396,7 @@ enum {
 	Ioff,
 	Iclock,
 	Igame,
+	Iinbe,
 	/* win2k shell extras */
 	Ishow = 100,
 	Ibin,
@@ -481,19 +484,6 @@ char *kthemename(void);
 char *kstylename(void);
 char *kmodename(void);
 ulong kthemecolor(char *key);
-
-void flatwdecor(Window *w);
-void flatwtitlectl(Window *w);
-void flatinittheme(void);
-void simplewdecor(Window *w);
-void simplewtitlectl(Window *w);
-void simpleinittheme(void);
-void win3wdecor(Window *w);
-void win3wtitlectl(Window *w);
-void win3inittheme(void);
-void win95wdecor(Window *w);
-void win95wtitlectl(Window *w);
-void win95inittheme(void);
 
 
 extern Channel *opentap;	/* open fromtap or totap */

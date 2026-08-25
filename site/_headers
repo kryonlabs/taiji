@@ -1,0 +1,9 @@
+/assets/**/*.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=3600
+
+/assets/**/*.raw
+  Cache-Control: public, max-age=3600
+
+/js/*.js
+  Cache-Control: public, max-age=3600

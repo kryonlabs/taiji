@@ -1,0 +1,19 @@
+[build]
+  command = "make site"
+  publish = "build/site"
+
+[[headers]]
+  for = "/assets/**/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/assets/**/*.raw"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/js/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"

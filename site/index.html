@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TaijiOS is a bootable desktop OS tree based on Plan 9, with an experimental browser boot demo.">
+  <meta property="og:title" content="TaijiOS">
+  <meta property="og:description" content="A Plan 9-based desktop OS, bootable locally and experimentally in the browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://taijios.net/">
+  <title>TaijiOS</title>
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="TaijiOS home">
+      <span class="brand-mark" aria-hidden="true">T</span>
+      <span>TaijiOS</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#boot">Boot</a>
+      <a href="#local">Local</a>
+      <a href="#status">Status</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="boot">
+      <div class="hero-copy">
+        <p class="eyebrow">Plan 9 desktop OS</p>
+        <h1>TaijiOS</h1>
+        <p class="lead">A bootable desktop OS tree based on Plan 9, tuned for fast local QEMU runs and prepared for a browser-hosted WASM demo.</p>
+        <div class="hero-actions">
+          <button class="primary-action" id="start-emulator" type="button">Start TaijiOS</button>
+          <a class="secondary-action" href="#local">Run locally</a>
+        </div>
+      </div>
+
+      <section class="emulator-panel" aria-label="TaijiOS browser emulator">
+        <div class="emulator-toolbar">
+          <div class="status-group">
+            <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+            <span id="emulator-status">Ready</span>
+          </div>
+          <div class="toolbar-actions">
+            <button class="boot-choice" data-boot-choice="1" type="button" disabled>1920</button>
+            <button class="boot-choice" data-boot-choice="2" type="button" disabled>1440</button>
+            <button class="boot-choice" data-boot-choice="3" type="button" disabled>1280</button>
+            <button class="boot-choice" data-boot-choice="4" type="button" disabled>Console</button>
+            <button id="reset-emulator" type="button" disabled>Reset</button>
+            <button id="fullscreen-emulator" type="button">Fullscreen</button>
+          </div>
+        </div>
+        <div class="screen-shell">
+          <div id="screen-container" class="screen-container">
+            <div class="screen-text" aria-label="TaijiOS text display"></div>
+            <canvas class="screen-canvas"></canvas>
+          </div>
+          <div class="screen-placeholder" id="screen-placeholder">
+            <img src="assets/taijios-desktop.png" alt="TaijiOS desktop with Explorer open">
+            <p>Browser boot uses a WASM x86 emulator and the TaijiOS web boot image.</p>
+            <p class="placeholder-note">Serve this page over HTTP, then start the emulator.</p>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="info-band" id="local">
+      <div class="section-copy">
+        <p class="eyebrow">Local boot</p>
+        <h2>Run the native VM while the web image matures</h2>
+        <p>TaijiOS already boots from this repository through QEMU. The local path shares the checkout as the root filesystem, so editing files on the host is immediately visible inside the VM.</p>
+      </div>
+      <div class="command-box" aria-label="Local TaijiOS commands">
+        <code>./q9</code>
+        <code>./q9 --text</code>
+        <code>./q9 rill</code>
+      </div>
+    </section>
+
+    <section class="status-grid" id="status" aria-label="Project status">
+      <article>
+        <span>Runtime</span>
+        <strong>Plan 9-based desktop</strong>
+        <p>Bootable kernel, userland, and graphical profile in the TaijiOS tree.</p>
+      </article>
+      <article>
+        <span>Browser</span>
+        <strong>Experimental WASM boot</strong>
+        <p>The website stages a mini raw image for v86 and keeps QEMU-specific host mounts out of the browser path.</p>
+      </article>
+      <article>
+        <span>Deploy</span>
+        <strong>Netlify-ready</strong>
+        <p>GitHub Actions builds the static artifact and deploys when Netlify secrets are present.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>TaijiOS</span>
+    <a href="https://github.com/waozixyz/plan9">Source</a>
+  </footer>
+
+  <script src="js/taijios-web.js" defer></script>
+</body>
+</html>

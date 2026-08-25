@@ -29,11 +29,7 @@ OFILES=\
 	deskicon.$O \
 	splash.$O \
 	theme.$O \
-	kryon.$O \
-	flat.$O \
-	simple.$O \
-	win3.$O \
-	win95.$O
+	kryon.$O
 
 HFILES=inc.h
 
