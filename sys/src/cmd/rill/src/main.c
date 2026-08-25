@@ -8,6 +8,13 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef KRYON_NATIVE_PLAN9
+AppHost *KtermCreateAppHost(int abi_version, const char *project_path);
+void KtermDestroyAppHost(AppHost *app_host);
+AppHost *ShelfCreateAppHost(int abi_version, const char *project_path);
+void ShelfDestroyAppHost(AppHost *app_host);
+#endif
+
 #if defined(__linux__) && !defined(KRYON_NATIVE_PLAN9)
 #define RILL_HAS_DLOPEN 1
 #include <dlfcn.h>
@@ -310,6 +317,33 @@ load_host_path(RillHostModule *slot, const char *path)
 #endif
 }
 
+#ifdef KRYON_NATIVE_PLAN9
+static int
+load_static_host(RillHostModule *slot, const char *id)
+{
+    CreateAppHostCallback create = NULL;
+    DestroyAppHostCallback destroy = NULL;
+
+    if(slot == NULL || id == NULL)
+        return 0;
+    if(strcmp(id, "kterm") == 0 || strcmp(id, "kapsule") == 0) {
+        create = KtermCreateAppHost;
+        destroy = KtermDestroyAppHost;
+    } else if(strcmp(id, "shelf") == 0) {
+        create = ShelfCreateAppHost;
+        destroy = ShelfDestroyAppHost;
+    }
+    if(create == NULL || destroy == NULL)
+        return 0;
+    slot->host = create(APP_HOST_ABI_VERSION, NULL);
+    if(slot->host == NULL)
+        return 0;
+    slot->destroy = destroy;
+    snprintf(slot->path, sizeof(slot->path), "builtin:%s", id);
+    return 1;
+}
+#endif
+
 static int
 try_host_dir(RillHostModule *slot, const char *dir)
 {
@@ -358,6 +392,11 @@ load_host_module(RillVisualState *visuals, const char *id)
         return NULL;
     if(slot->host != NULL)
         return slot;
+
+#ifdef KRYON_NATIVE_PLAN9
+    if(load_static_host(slot, id))
+        return slot;
+#endif
 
     env_dir = getenv("RILL_APP_HOST_DIR");
     if(try_host_dir_list(slot, env_dir))
@@ -1364,11 +1403,7 @@ main(void)
         return 1;
     }
     EnableEventWaiting();
-#ifdef KRYON_NATIVE_PLAN9
-    SetTargetFPS(24);
-#else
     SetTargetFPS(60);
-#endif
     SetUIDefaultFontAutoLoad(1);
     configure_system_look(&visuals, &test);
 
