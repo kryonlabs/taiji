@@ -134,8 +134,12 @@
     if (autoBootQueued) {
       return;
     }
-    const choice = new URLSearchParams(window.location.search).get("boot");
-    if (!/^[1-4]$/.test(choice || "")) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("boot") === "manual") {
+      return;
+    }
+    const choice = params.get("boot") || "1";
+    if (!/^[1-9]$/.test(choice)) {
       return;
     }
     autoBootQueued = true;
