@@ -1,0 +1,33 @@
+< /$objtype/mkfile
+
+TARG=rill
+KRYON=/sys/src/kryon
+BIN=/$objtype/bin
+OUT=$O.out
+
+CPPFLAGS=-I../include -I$KRYON/src/platform/plan9/include -I$KRYON/include \
+	-DKRYON_BACKEND_LIBDRAW -DKRYON_PLATFORM_PLAN9 -DKRYON_NATIVE_PLAN9
+CFLAGS=-FTVw
+
+OFILES=\
+	src/main.$O\
+	src/rill_shell.$O\
+	src/platform_plan9.$O\
+
+LIB=/$objtype/lib/libkryon.a /$objtype/lib/libstdio.a
+
+all:V: $OUT
+
+install:V: $BIN/$TARG
+
+$BIN/$TARG: $OUT
+	cp $OUT $BIN/$TARG
+
+$OUT: $OFILES $LIB
+	$LD -o $target $prereq -ldraw -lmemdraw -lthread
+
+src/%.$O: src/%.c
+	cd src && cpp -+ $CPPFLAGS $stem.c > $stem.i && $CC $CFLAGS -c $stem.i && mv $stem.i.$O $stem.$O && rm -f $stem.i
+
+clean:V:
+	rm -f src/*.[$OS] src/*.i [$OS].out $TARG

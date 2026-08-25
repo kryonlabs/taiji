@@ -2,3 +2,12 @@
 	path = sys/src/kryon
 	url = https://github.com/kryonlabs/kryon.git
 	branch = master
+[submodule "sys/src/inbe"]
+	path = sys/src/inbe
+	url = https://github.com/waozixyz/inbe.git
+[submodule "sys/src/kapsule"]
+	path = sys/src/kapsule
+	url = https://github.com/kryonlabs/kapsule.git
+[submodule "sys/src/shelf"]
+	path = sys/src/shelf
+	url = https://github.com/kryonlabs/shelf.git
