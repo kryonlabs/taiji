@@ -2,15 +2,17 @@
   "use strict";
 
   const v86Base = "assets/v86";
+  const assetVersion = "20260826-oom";
+  const versioned = (path) => `${path}?v=${assetVersion}`;
   const emulatorConfig = {
-    wasm_path: `${v86Base}/v86.wasm`,
-    memory_size: 192 * 1024 * 1024,
+    wasm_path: versioned(`${v86Base}/v86.wasm`),
+    memory_size: 256 * 1024 * 1024,
     vga_memory_size: 8 * 1024 * 1024,
     screen_container: document.getElementById("screen-container"),
-    bios: { url: `${v86Base}/seabios.bin` },
-    vga_bios: { url: `${v86Base}/vgabios.bin` },
+    bios: { url: versioned(`${v86Base}/seabios.bin`) },
+    vga_bios: { url: versioned(`${v86Base}/vgabios.bin`) },
     hda: {
-      url: "assets/taijios-web.raw",
+      url: versioned("assets/taijios-web.raw"),
     },
     net_device: { type: "virtio" },
     disable_speaker: true,
@@ -53,7 +55,7 @@
       return;
     }
     if (!v86LoadPromise) {
-      v86LoadPromise = loadScript(`${v86Base}/libv86.js`);
+      v86LoadPromise = loadScript(versioned(`${v86Base}/libv86.js`));
     }
     await v86LoadPromise;
     if (!window.V86 && !window.V86Starter) {
