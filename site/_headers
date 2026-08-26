@@ -2,9 +2,16 @@
   Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-elem 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'
   Cache-Control: public, max-age=0, must-revalidate
 
+/assets/*.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=3600
+
 /assets/**/*.wasm
   Content-Type: application/wasm
   Cache-Control: public, max-age=3600
+
+/assets/*.raw
+  Cache-Control: no-store
 
 /assets/**/*.raw
   Cache-Control: no-store
