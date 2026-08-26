@@ -1,0 +1,69 @@
+#!/bin/rc
+
+rfork e
+
+fn say {
+	echo 'q9hw	'$*
+}
+
+say 'TaijiOS hardware'
+
+say 'section	drivers'
+if(test -f /dev/drivers)
+	cat /dev/drivers | sed 's/^/q9hw	driver	/'
+if not
+	say 'missing	/dev/drivers'
+
+say 'section	network'
+if(test -d /net/ether0) {
+	say 'ok	/net/ether0'
+	if(test -f /net/ether0/addr)
+		say 'ether0	addr	'`{cat /net/ether0/addr}
+}
+if not
+	say 'missing	/net/ether0'
+if(test -d /net/tcp)
+	say 'ok	/net/tcp'
+if not
+	say 'missing	/net/tcp'
+
+say 'section	storage'
+found=()
+for(i in /dev/sd*) {
+	if(test -e $i) {
+		found=($found $i)
+		say 'device	'$i
+	}
+}
+if(~ $#found 0)
+	say 'missing	/dev/sd*'
+
+say 'section	display-input'
+for(i in /dev/draw /dev/draw/new /dev/vgactl /dev/mouse /dev/kbd /dev/kbin /dev/kbmap) {
+	if(test -e $i)
+		say 'ok	'$i
+	if not
+		say 'missing	'$i
+}
+
+say 'section	desktop'
+for(i in ktrem rill shelf acme rio stats) {
+	if(test -x /bin/$i)
+		say 'ok	'$i
+	if not
+		say 'missing	'$i
+}
+
+say 'section	boot'
+if(! ~ $#q9fast 0)
+	say 'q9fast	'$q9fast
+if(! ~ $#q9unix 0)
+	say 'q9unix	'$q9unix
+if(! ~ $#nousbboot 0)
+	say 'nousbboot	'$nousbboot
+if(! ~ $#monitor 0)
+	say 'monitor	'$monitor
+if(! ~ $#vgasize 0)
+	say 'vgasize	'$vgasize
+if(! ~ $#mouseport 0)
+	say 'mouseport	'$mouseport

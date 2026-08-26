@@ -24,9 +24,13 @@ fn must {
 	}
 }
 
-echo driver-smoke-devices
-if(test -f /dev/drivers)
-	cat /dev/drivers
+if(test -x /bin/q9hw)
+	q9hw
+if not {
+	echo driver-smoke-devices
+	if(test -f /dev/drivers)
+		cat /dev/drivers
+}
 
 must test -d /net/ether0
 must test -d /net/tcp
@@ -63,7 +67,7 @@ while [ "$i" -lt "$timeout" ]; do
 		echo "driver-smoke: ok (${elapsed}s)"
 		echo "driver-smoke: net-device ${netdevice}"
 		awk '
-			/#l0:| memory:|driver-smoke-devices|^#[A-Za-z0-9]+/ {
+			/#l0:| memory:|driver-smoke-devices|^#[A-Za-z0-9]+|^q9hw	/ {
 				if(!seen[$0]++)
 					print
 			}

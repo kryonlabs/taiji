@@ -43,6 +43,11 @@ for(i in vncs vncv vt stats faces)
 	have $i
 echo
 
+echo 'q9 diagnostics'
+for(i in q9hw)
+	have $i
+echo
+
 if(test -x /bin/go)
 	echo 'ok	go'
 if not

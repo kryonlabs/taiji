@@ -15,6 +15,7 @@ ROOT_PAYLOAD_FILES = (
     "386/lib/ape/libbsd.a",
     "rc/bin/ape/linuxcc",
     "rc/bin/ape/taiji-posix-sh",
+    "rc/bin/q9hw",
     "sys/include/ape/poll.h",
     "sys/include/ape/sys/epoll.h",
     "sys/include/ape/sys/inotify.h",

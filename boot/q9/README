@@ -50,6 +50,11 @@ before launching the desktop.
 network, source mount, and installed desktop binaries, then reports elapsed
 time and key device lines in `boot/q9/driver-smoke.log`.
 
+Run `q9hw` inside TaijiOS to print the detected drivers, network, storage,
+display/input devices, desktop binaries, and q9 boot flags.  The driver smoke
+test runs the same command, so new driver work has a stable guest-side report
+to compare against.
+
 The default and verified q9 NIC is `virtio-net-pci`.  Use
 `--net-device model` or `Q9_NET_DEVICE=model` to probe another QEMU NIC
 without editing the launcher.  q9 also exports `TMPDIR`, defaulting to `/tmp`,
