@@ -121,6 +121,7 @@ extern speed_t cfgetospeed(const struct termios *);
 extern int cfsetospeed(struct termios *, speed_t);
 extern speed_t cfgetispeed(const struct termios *);
 extern int cfsetispeed(struct termios *, speed_t);
+extern void cfmakeraw(struct termios *);
 extern int tcgetattr(int, struct termios *);
 extern int tcsetattr(int, int, const struct termios *);
 #ifdef __TYPES_H

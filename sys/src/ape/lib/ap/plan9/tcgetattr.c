@@ -119,6 +119,20 @@ tcsetattr(int fd, int, const struct termios *t)
 	return 0;
 }
 
+void
+cfmakeraw(struct termios *t)
+{
+	if(t == 0)
+		return;
+	t->c_iflag &= ~(BRKINT|ICRNL|IGNBRK|IGNCR|INLCR|INPCK|ISTRIP|IXON|IXOFF|PARMRK);
+	t->c_oflag &= ~OPOST;
+	t->c_lflag &= ~(ECHO|ECHOE|ECHOK|ECHONL|ICANON|IEXTEN|ISIG);
+	t->c_cflag &= ~CSIZE;
+	t->c_cflag |= CS8;
+	t->c_cc[VMIN] = 1;
+	t->c_cc[VTIME] = 0;
+}
+
 int
 tcsetpgrp(int fd, pid_t pgrpid)
 {

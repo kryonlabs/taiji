@@ -12,6 +12,16 @@ extern "C" {
 /* FIONREAD: return number of bytes readable in *(long*)arg */
 #define FIONREAD 1
 
+#define TIOCGWINSZ 2
+#define TIOCSWINSZ 3
+
+struct winsize {
+	unsigned short	ws_row;
+	unsigned short	ws_col;
+	unsigned short	ws_xpixel;
+	unsigned short	ws_ypixel;
+};
+
 int ioctl(int, unsigned long, void*);
 
 #ifdef __cplusplus

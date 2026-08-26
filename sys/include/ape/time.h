@@ -17,6 +17,18 @@ typedef long clock_t;
 #define _TIME_T
 typedef long time_t;
 #endif
+#ifndef _CLOCKID_T
+#define _CLOCKID_T
+typedef int clockid_t;
+#endif
+
+struct timespec {
+	time_t	tv_sec;
+	long	tv_nsec;
+};
+
+#define CLOCK_REALTIME	0
+#define CLOCK_MONOTONIC	1
 
 struct tm {
 	int	tm_sec;
@@ -35,9 +47,11 @@ extern "C" {
 #endif
 
 extern clock_t clock(void);
+extern int clock_gettime(clockid_t, struct timespec *);
 extern double difftime(time_t, time_t);
 extern time_t mktime(struct tm *);
 extern time_t time(time_t *);
+extern int nanosleep(const struct timespec *, struct timespec *);
 extern char *asctime(const struct tm *);
 extern char *ctime(const time_t *);
 extern struct tm *gmtime(const time_t *);

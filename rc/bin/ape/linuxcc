@@ -1,0 +1,6 @@
+#!/bin/rc
+rfork e
+cc=/$cputype/bin/ape/cc
+if(! test -x $cc)
+	cc=/bin/ape/cc
+exec $cc '-D_POSIX_C_SOURCE=200809L' -D_BSD_EXTENSION -D_TAIJI_POSIX_SOURCE $*

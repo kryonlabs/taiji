@@ -23,6 +23,7 @@ OFILES=\
 	chdir.$O\
 	chmod.$O\
 	chown.$O\
+	clock_gettime.$O\
 	close.$O\
 	convM2D.$O\
 	convD2M.$O\
@@ -69,6 +70,7 @@ OFILES=\
 	opendir.$O\
 	pause.$O\
 	pipe.$O\
+	poll.$O\
 	profile.$O\
 	qlock.$O\
 	read.$O\
@@ -83,6 +85,7 @@ OFILES=\
 	sigprocmask.$O\
 	sigsuspend.$O\
 	sleep.$O\
+	nanosleep.$O\
 	sqrt.$O\
 	stat.$O\
 	system.$O\
@@ -97,6 +100,9 @@ OFILES=\
 	utime.$O\
 	wait.$O\
 	write.$O\
+	mman.$O\
+	epoll.$O\
+	inotify.$O\
 
 UPDATE=\
 	mkfile\

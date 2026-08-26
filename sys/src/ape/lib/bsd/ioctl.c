@@ -26,6 +26,25 @@ ioctl(int fd, unsigned long request, void* arg)
 		/* this works if the file is buffered somehow */
 		*(long*)arg = d.st_size;
 		return 0;
+	} else if(request == TIOCGWINSZ) {
+		struct winsize *ws;
+
+		if(!isatty(fd)) {
+			errno = ENOTTY;
+			return -1;
+		}
+		ws = arg;
+		ws->ws_row = 24;
+		ws->ws_col = 80;
+		ws->ws_xpixel = 0;
+		ws->ws_ypixel = 0;
+		return 0;
+	} else if(request == TIOCSWINSZ) {
+		if(!isatty(fd)) {
+			errno = ENOTTY;
+			return -1;
+		}
+		return 0;
 	} else {
 		errno = EINVAL;
 		return -1;

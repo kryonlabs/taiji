@@ -1,0 +1,12 @@
+#!/bin/rc
+rfork en
+fn sigterm{}
+HOME=$home
+TERM=vt100
+CC=linuxcc
+CFLAGS='-D_POSIX_C_SOURCE=200809L -D_BSD_EXTENSION -D_TAIJI_POSIX_SOURCE'
+bind -b /rc/bin/ape /bin
+bind -b /$cputype/bin/ape /bin
+if(test -d /$cputype/bin/pub)
+	bind -a /$cputype/bin/pub /bin
+exec /bin/sh $*

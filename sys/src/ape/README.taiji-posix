@@ -1,0 +1,30 @@
+TaijiOS APE Linux-source compatibility
+======================================
+
+This layer is for source compatibility with portable Linux/POSIX programs. It is
+not a Linux binary ABI.
+
+Use:
+
+	ape/taiji-posix-sh
+	linuxcc file.c -o file
+
+The profile enables:
+
+	-D_POSIX_C_SOURCE=200809L
+	-D_BSD_EXTENSION
+	-D_TAIJI_POSIX_SOURCE
+
+Supported additions include poll(2), clock_gettime(2), nanosleep(2), basic
+terminal window-size ioctls, and headers for common Linux facilities that are
+not implemented on TaijiOS.
+
+Unsupported Linux-only facilities intentionally fail with ENOSYS:
+
+	mmap/munmap/mprotect/msync
+	epoll_create/epoll_ctl/epoll_wait
+	inotify_init/inotify_add_watch/inotify_rm_watch
+
+TUI programs should prefer termios, ANSI/vt100 escapes, poll/select, and
+TIOCGWINSZ. The default compatibility terminal size is 80x24 until the active
+terminal can report dynamic geometry.
