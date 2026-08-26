@@ -8,6 +8,7 @@ cd "$root"
 outdir=${TAIJI_DRIVER_SMOKE_DIR:-boot/q9}
 log=${TAIJI_DRIVER_SMOKE_LOG:-$outdir/driver-smoke.log}
 timeout=${TAIJI_DRIVER_SMOKE_TIMEOUT:-120}
+netdevice=${Q9_NET_DEVICE:-virtio-net-pci}
 
 mkdir -p "$outdir"
 : >"$log"
@@ -60,6 +61,7 @@ while [ "$i" -lt "$timeout" ]; do
 	if grep -q 'driver-smoke-ok' "$log"; then
 		elapsed=$(( $(date +%s) - start ))
 		echo "driver-smoke: ok (${elapsed}s)"
+		echo "driver-smoke: net-device ${netdevice}"
 		awk '
 			/#l0:| memory:|driver-smoke-devices|^#[A-Za-z0-9]+/ {
 				if(!seen[$0]++)
@@ -71,6 +73,11 @@ while [ "$i" -lt "$timeout" ]; do
 	if grep -q 'driver-smoke-failed' "$log"; then
 		echo "driver-smoke: guest checks failed; tail follows" >&2
 		tail -80 "$log" >&2
+		exit 1
+	fi
+	if grep -q 'no ethernet interfaces found' "$log"; then
+		echo "driver-smoke: no ethernet interface for ${netdevice}; tail follows" >&2
+		tail -40 "$log" >&2
 		exit 1
 	fi
 	if ! kill -0 "$q9_pid" 2>/dev/null; then

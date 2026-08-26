@@ -23,6 +23,9 @@ qemulog=$state/qemu.log
 socatlog=$state/socat.log
 monitorlog=$state/monitor.log
 
+TMPDIR=${Q9_TMPDIR:-${TMPDIR:-/tmp}}
+export TMPDIR
+
 qemu=${QEMU:-qemu-system-x86_64}
 image=${Q9_IMAGE:-boot/pxeboot.raw}
 textmac=${Q9_MAC:-52:54:00:12:34:57}
@@ -30,6 +33,7 @@ guimac=${Q9_GUI_MAC:-52:54:00:12:34:58}
 mac=$guimac
 mem=${Q9_MEM:-1G}
 smp=${Q9_SMP:-1}
+netdevice=${Q9_NET_DEVICE:-virtio-net-pci}
 boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
@@ -45,10 +49,10 @@ usage()
 {
 	status=${1:-1}
 	cat >&2 <<EOF
-usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--rebuild-desktop] [--kernel name|path] [--smp n] [console|shell|tty|gui]
-       ./q9 [--text] [--mini] [--raw] [--rebuild-desktop] [--kernel name|path] [--smp n] run command
-       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] tty-run command
-       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] acme|rill [args...]
+usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] [console|shell|tty|gui]
+       ./q9 [--text] [--mini] [--raw] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] tty-run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] acme|rill [args...]
 
 Default mode boots Glenda's normal graphical TaijiOS profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
@@ -60,6 +64,7 @@ Set Q9_CHECKPOINT=1 to try experimental pre-desktop checkpoint save/resume.
 Use --rebuild-desktop or Q9_BUILD_DESKTOP=1 to rebuild desktop tools before graphical launch.
 Use --kernel name or Q9_KERNEL=name to boot /386/9name, or pass an explicit path.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
+Use --net-device model or Q9_NET_DEVICE=model to test a QEMU NIC model.
 TaijiOS MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
 	exit "$status"
@@ -130,6 +135,11 @@ while [ $# -gt 0 ]; do
 			exit 1
 		fi
 		smp=$2
+		shift 2
+		;;
+	--net-device)
+		[ $# -ge 2 ] || usage
+		netdevice=$2
 		shift 2
 		;;
 	--help|-h)
@@ -489,7 +499,7 @@ qemu_common()
 			echo "q9: resuming pre-desktop checkpoint: $sessionstate" >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
-				-device "virtio-net-pci,netdev=net0,mac=$mac" \
+				-device "$netdevice,netdev=net0,mac=$mac" \
 				-netdev "user,id=net0,$u9fs,$tftp" \
 				-monitor "unix:$monitorsock,server=on,wait=off" \
 				-display gtk,window-close=on \
@@ -499,7 +509,7 @@ qemu_common()
 			echo 'q9: no pre-desktop checkpoint; cold booting' >&2
 			"$qemu" -m "$mem" -smp "$smp" \
 				-drive file="$root/$image",format=raw -snapshot \
-				-device "virtio-net-pci,netdev=net0,mac=$mac" \
+				-device "$netdevice,netdev=net0,mac=$mac" \
 				-netdev "user,id=net0,$u9fs,$tftp" \
 				-monitor "unix:$monitorsock,server=on,wait=off" \
 				-display gtk,window-close=on \
@@ -508,7 +518,7 @@ qemu_common()
 	else
 		"$qemu" -m "$mem" -smp "$smp" \
 			-drive file="$root/$image",format=raw -snapshot \
-			-device "virtio-net-pci,netdev=net0,mac=$mac" \
+			-device "$netdevice,netdev=net0,mac=$mac" \
 			-netdev "user,id=net0,$u9fs,$tftp" "$@"
 	fi
 }
