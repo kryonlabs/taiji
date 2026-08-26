@@ -12,6 +12,7 @@ usr/glenda/lib/kbmap
 sys/log
 sys/src/cmd/unix/u9fs/u9fs
 boot/q9/build.log
+boot/q9/driver-smoke.log
 boot/q9/monitor
 boot/q9/monitor.log
 boot/q9/monitor.sock

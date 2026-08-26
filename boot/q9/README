@@ -18,6 +18,7 @@ Examples:
 	./q9 run 'rill'
 	./q9 tty-run 'pwd; ls /sys/src/cmd'
 	./q9 run 'cd /sys/src/cmd/rill && mk install'
+	make driver-smoke
 	./q9 --raw
 
 Use `./q9 tty`, `./q9 shell`, or `./q9 --text` when you want the q9
@@ -44,6 +45,10 @@ Graphical q9 boots use the installed desktop binaries by default to keep
 startup fast.  Use `./q9 --rebuild-desktop` or set `Q9_BUILD_DESKTOP=1`
 when you want q9 to run `mk install` for Kryon, ktrem, Shelf, and Rill
 before launching the desktop.
+
+`make driver-smoke` boots the PXE q9 profile, checks the expected virtual
+network, source mount, and installed desktop binaries, then reports elapsed
+time and key device lines in `boot/q9/driver-smoke.log`.
 
 Use `--kernel name` or `Q9_KERNEL=name` to boot a different installed 386
 kernel.  For example, `--kernel pc` resolves to `ether0!/386/9pc`, and

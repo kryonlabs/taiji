@@ -2,7 +2,7 @@ SITE_BUILD_DIR ?= build/site
 SITE_BOOT_IMAGE ?= boot/mini.raw
 SITE_WEB_IMAGE ?= $(SITE_BUILD_DIR)/assets/taijios-web.raw
 
-.PHONY: site clean-site serve-site
+.PHONY: site clean-site serve-site driver-smoke
 
 site:
 	rm -rf "$(SITE_BUILD_DIR)"
@@ -26,3 +26,6 @@ clean-site:
 
 serve-site: site
 	cd "$(SITE_BUILD_DIR)" && python3 -m http.server 8000
+
+driver-smoke:
+	sh scripts/driver-smoke.sh
