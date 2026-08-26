@@ -2,7 +2,7 @@
   "use strict";
 
   const v86Base = "assets/v86";
-  const assetVersion = "20260826-oom";
+  const assetVersion = "20260826-q9hw";
   const versioned = (path) => `${path}?v=${assetVersion}`;
   const emulatorConfig = {
     wasm_path: versioned(`${v86Base}/v86.wasm`),
