@@ -398,6 +398,14 @@ h2 {
   color: var(--muted);
 }
 
+.nl-wrap,
+.nl-badge,
+.nl-card {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 @media (max-width: 880px) {
   .hero,
   .info-band,

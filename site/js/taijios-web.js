@@ -4,7 +4,7 @@
   const v86Base = "assets/v86";
   const emulatorConfig = {
     wasm_path: `${v86Base}/v86.wasm`,
-    memory_size: 96 * 1024 * 1024,
+    memory_size: 192 * 1024 * 1024,
     vga_memory_size: 8 * 1024 * 1024,
     screen_container: document.getElementById("screen-container"),
     bios: { url: `${v86Base}/seabios.bin` },

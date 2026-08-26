@@ -1,8 +1,32 @@
 #!/usr/bin/env python3
 import sys
 import gzip
+import os
 import zlib
 from pathlib import Path
+
+
+ROOT_PAYLOAD_FILES = (
+    "386/bin/rill",
+    "386/bin/ktrem",
+    "386/bin/shelf",
+    "386/bin/explorer",
+    "usr/glenda/lib/profile",
+    "usr/glenda/bin/rc/startwm",
+    "usr/glenda/readme.rill",
+    "lib/q9/desktop",
+    "lib/kryon/system-theme",
+    "usr/glenda/lib/kryon/theme",
+    "usr/glenda/lib/wallpaper",
+)
+
+ROOT_PAYLOAD_DIRS = (
+    "lib/q9",
+    "lib/kryon",
+    "usr/glenda/lib/kryon",
+)
+
+BLZ_RAW_CHUNK = 32 * 1024
 
 
 def main() -> int:
@@ -37,6 +61,8 @@ def main() -> int:
         return 1
 
     image[start : start + old_len] = replacement + b"\0" * (old_len - len(replacement))
+    if not expand_partition(image):
+        return 1
     if not patch_kernel_payload(image):
         return 1
     if not patch_root_payload(image):
@@ -65,17 +91,19 @@ def patch_root_payload(image: bytearray) -> bool:
         return False
 
     payload_start = line_end + 1
+    payload_limit = partition_end(image)
+    if payload_limit <= payload_start:
+        print("embedded gzfilesystem payload starts outside the Plan 9 partition", file=sys.stderr)
+        return False
     payload_end = payload_start + old_size
     compressed = bytes(image[payload_start:payload_end])
     try:
-        payload = bytearray(gzip.decompress(compressed))
+        payload = gzip.decompress(compressed)
     except gzip.BadGzipFile as exc:
         print(f"could not decompress embedded root payload: {exc}", file=sys.stderr)
         return False
 
     replacements = {
-        b"exec rio": b"exec rc ",
-        b"acme -i riostart # rio already running": b"exec rc -i                            ",
         b"\tip/ipconfig": b"\t#ipconfig  ",
     }
     for old, new in replacements.items():
@@ -86,13 +114,19 @@ def patch_root_payload(image: bytearray) -> bool:
         if count == 0:
             print(f"embedded root payload did not contain {old!r}", file=sys.stderr)
             return False
-        payload[:] = payload.replace(old, new)
+        payload = payload.replace(old, new)
 
-    recompressed = gzip.compress(bytes(payload), compresslevel=9, mtime=0)
+    try:
+        payload = append_root_payload(payload)
+    except ValueError as exc:
+        print(f"could not append embedded root payload: {exc}", file=sys.stderr)
+        return False
+
+    recompressed = gzip.compress(payload, compresslevel=9, mtime=0)
     new_size = len(recompressed)
-    if new_size > old_size:
+    if new_size > payload_limit - payload_start:
         print(
-            f"patched root payload grew from {old_size} to {new_size} bytes",
+            f"patched root payload grew past Plan 9 partition capacity: {new_size} bytes",
             file=sys.stderr,
         )
         return False
@@ -104,8 +138,195 @@ def patch_root_payload(image: bytearray) -> bool:
         return False
 
     image[start + len(marker) : line_end] = str(new_size).encode("ascii")
-    image[payload_start:payload_end] = recompressed + b"\0" * (old_size - len(recompressed))
+    image[payload_start:payload_limit] = recompressed + b"\0" * (payload_limit - payload_start - len(recompressed))
     return True
+
+
+def expand_partition(image: bytearray) -> bool:
+    if len(image) < 512 or image[510:512] != b"\x55\xaa":
+        print("raw image does not contain an MBR signature", file=sys.stderr)
+        return False
+
+    entry = 446
+    start_lba = int.from_bytes(image[entry + 8 : entry + 12], "little")
+    if start_lba <= 0:
+        print("raw image has an invalid Plan 9 partition start", file=sys.stderr)
+        return False
+
+    sectors = len(image) // 512 - start_lba
+    if sectors <= 0:
+        print("raw image is too small for its Plan 9 partition", file=sys.stderr)
+        return False
+
+    image[entry + 5 : entry + 8] = b"\xfe\xff\xff"
+    image[entry + 12 : entry + 16] = sectors.to_bytes(4, "little")
+
+    old = b"part gzroot 4096 14272\n"
+    new = f"part gzroot 4096 {sectors}\n".encode("ascii")
+    if len(old) != len(new):
+        print("expanded Plan 9 partition map does not fit in place", file=sys.stderr)
+        return False
+    pos = image.find(old, start_lba * 512, (start_lba + 4096) * 512)
+    if pos < 0:
+        print("raw image Plan 9 gzroot partition map entry not found", file=sys.stderr)
+        return False
+    image[pos : pos + len(old)] = new
+    return True
+
+
+def partition_end(image: bytes | bytearray) -> int:
+    entry = 446
+    start_lba = int.from_bytes(image[entry + 8 : entry + 12], "little")
+    sectors = int.from_bytes(image[entry + 12 : entry + 16], "little")
+    return min(len(image), (start_lba + sectors) * 512)
+
+
+def append_root_payload(blz: bytes) -> bytes:
+    length, descriptors = parse_bflz(blz)
+    archive = unbflz_from_descriptors(length, descriptors)
+    terminator = find_mkfs_terminator(archive)
+    additions = make_mkfs_records()
+
+    new_descriptors = []
+    produced = 0
+    for descriptor in descriptors:
+        if produced >= terminator:
+            break
+        kind, size, data_or_offset = descriptor
+        take = min(size, terminator - produced)
+        if take <= 0:
+            break
+        if kind == "raw":
+            new_descriptors.append(("raw", take, data_or_offset[:take]))
+        else:
+            new_descriptors.append(("ref", take, data_or_offset))
+        produced += take
+
+    if produced != terminator:
+        raise ValueError("could not truncate bflz stream at mkfs terminator")
+
+    new_descriptors.append(("raw", len(additions), additions))
+    return write_bflz(terminator + len(additions), new_descriptors)
+
+
+def make_mkfs_records() -> bytes:
+    out = bytearray()
+    for path in ROOT_PAYLOAD_DIRS:
+        out += f"/{path} 20000000755 rsc staff 4294967295 0\n".encode("ascii")
+    for path in ROOT_PAYLOAD_FILES:
+        src = Path(path)
+        if not src.exists():
+            raise ValueError(f"{src} does not exist")
+        data = src.read_bytes()
+        mode = "775" if os.access(src, os.X_OK) else "664"
+        out += f"/{path} {mode} rsc staff 4294967295 {len(data)}\n".encode("ascii")
+        out += data
+    out += b"end of archive\n"
+    return bytes(out)
+
+
+def find_mkfs_terminator(archive: bytes) -> int:
+    pos = 0
+    while True:
+        line_end = archive.find(b"\n", pos)
+        if line_end < 0:
+            raise ValueError("mkfs archive terminator not found")
+        line = archive[pos:line_end]
+        if line == b"end of archive":
+            return pos
+        fields = line.split()
+        if len(fields) != 6:
+            raise ValueError(f"bad mkfs header at byte {pos}")
+        try:
+            size = int(fields[5])
+        except ValueError as exc:
+            raise ValueError(f"bad mkfs size at byte {pos}") from exc
+        pos = line_end + 1 + size
+
+
+def parse_bflz(blob: bytes) -> tuple[int, list[tuple[str, int, bytes | int]]]:
+    if not blob.startswith(b"BLZ\n"):
+        raise ValueError("embedded root is not a BLZ payload")
+
+    length = read_be32(blob, 4)
+    pos = 8
+    total = 0
+    descriptors: list[tuple[str, int, bytes | int]] = []
+    while total < length:
+        block = read_be32(blob, pos)
+        pos += 4
+        if block & 0x80000000:
+            size = block & 0x7FFFFFFF
+            descriptors.append(("raw", size, b""))
+        else:
+            size = block
+            offset = read_be32(blob, pos)
+            pos += 4
+            descriptors.append(("ref", size, offset))
+        total += size
+    if total != length:
+        raise ValueError("bad BLZ descriptor lengths")
+
+    raw_pos = pos
+    hydrated = []
+    for kind, size, data_or_offset in descriptors:
+        if kind == "raw":
+            raw = blob[raw_pos : raw_pos + size]
+            if len(raw) != size:
+                raise ValueError("short BLZ raw data")
+            hydrated.append((kind, size, raw))
+            raw_pos += size
+        else:
+            hydrated.append((kind, size, data_or_offset))
+    return length, hydrated
+
+
+def unbflz_from_descriptors(length: int, descriptors: list[tuple[str, int, bytes | int]]) -> bytes:
+    out = bytearray()
+    for kind, size, data_or_offset in descriptors:
+        if kind == "raw":
+            out += data_or_offset
+        else:
+            offset = int(data_or_offset)
+            for i in range(size):
+                out.append(out[offset + i])
+    if len(out) != length:
+        raise ValueError("bad BLZ expansion length")
+    return bytes(out)
+
+
+def write_bflz(length: int, descriptors: list[tuple[str, int, bytes | int]]) -> bytes:
+    out = bytearray(b"BLZ\n")
+    out += write_be32(length)
+    raw = bytearray()
+    total = 0
+    for kind, size, data_or_offset in descriptors:
+        if kind == "raw":
+            data = bytes(data_or_offset)
+            if len(data) != size:
+                raise ValueError("bad BLZ raw output length")
+            for offset in range(0, size, BLZ_RAW_CHUNK):
+                chunk = data[offset : offset + BLZ_RAW_CHUNK]
+                out += write_be32(0x80000000 | len(chunk))
+                raw += chunk
+                total += len(chunk)
+        else:
+            out += write_be32(size)
+            out += write_be32(int(data_or_offset))
+            total += size
+    if total != length:
+        raise ValueError("bad BLZ output length")
+    return bytes(out + raw)
+
+
+def read_be32(data: bytes, offset: int) -> int:
+    if offset + 4 > len(data):
+        raise ValueError("short BLZ integer")
+    return int.from_bytes(data[offset : offset + 4], "big")
+
+
+def write_be32(value: int) -> bytes:
+    return value.to_bytes(4, "big")
 
 
 def patch_kernel_payload(image: bytearray) -> bool:
