@@ -2,7 +2,7 @@ SITE_BUILD_DIR ?= build/site
 SITE_BOOT_IMAGE ?= boot/mini.raw
 SITE_WEB_IMAGE ?= $(SITE_BUILD_DIR)/assets/taijios-web.raw
 
-.PHONY: site clean-site serve-site driver-smoke linux-support-smoke pcvirt
+.PHONY: site clean-site serve-site driver-smoke linux-support-smoke linuxrun-smoke pcvirt
 
 site:
 	rm -rf "$(SITE_BUILD_DIR)"
@@ -32,6 +32,9 @@ driver-smoke:
 
 linux-support-smoke:
 	sh scripts/taiji-support.sh linux-support-suite
+
+linuxrun-smoke:
+	sh scripts/taiji-support.sh linuxrun-smoke
 
 pcvirt:
 	sh scripts/taiji-support.sh build-pcvirt

@@ -11,6 +11,7 @@ usage()
 usage: scripts/taiji-support.sh ape-smoke
        scripts/taiji-support.sh build-pcvirt
        scripts/taiji-support.sh install-linuxrun
+       scripts/taiji-support.sh linuxrun-smoke
        scripts/taiji-support.sh linux-support-suite
 EOF
 	exit 1
@@ -119,6 +120,24 @@ EOF
 )"
 }
 
+linuxrun_smoke()
+{
+	taiji_guest_expect linuxrun-smoke taiji-linuxrun-smoke-ok "$(cat <<'EOF'
+echo taiji-linuxrun-smoke-start
+cd /sys/src/cmd/linuxrun
+if(! mk install){
+	echo taiji-linuxrun-install-failed
+	fshalt
+}
+if(! /386/bin/linuxrun -s){
+	echo taiji-linuxrun-smoke-failed
+	fshalt
+}
+fshalt
+EOF
+)"
+}
+
 build_pcvirt()
 {
 	taiji_guest_expect build-pcvirt taiji-pcvirt-build-ok "$(cat <<'EOF'
@@ -162,6 +181,10 @@ if(! mk install){
 	fshalt
 }
 echo taiji-linuxrun-install-ok
+if(! /386/bin/linuxrun -s){
+	echo taiji-linuxrun-smoke-failed
+	fshalt
+}
 cd /sys/src/9/pc
 if(! mk 'CONF=pcvirt' install){
 	echo taiji-pcvirt-build-failed
@@ -186,6 +209,9 @@ build-pcvirt)
 	;;
 install-linuxrun)
 	install_linuxrun
+	;;
+linuxrun-smoke)
+	linuxrun_smoke
 	;;
 linux-support-suite)
 	linux_support_suite

@@ -33,6 +33,7 @@ TUI programs should prefer termios, ANSI/vt100 escapes, poll/select, and
 TIOCGWINSZ. The default compatibility terminal size is 80x24 until the active
 terminal can report dynamic geometry.
 
-For Linux binaries, use `linuxrun file` to inspect whether the file is a
-supported Linux ELF candidate. Direct Linux ELF execution is not available yet;
-source ports through APE remain the supported compatibility path.
+For Linux binaries, use `linuxrun -n file` to inspect the ELF header and
+program-header load plan without trying to execute it. `linuxrun -s` runs the
+built-in ELF loader smoke fixture. Direct Linux ELF execution is not available
+yet; source ports through APE remain the supported compatibility path.
