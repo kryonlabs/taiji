@@ -65,9 +65,11 @@ extern "C" {
 
 extern mode_t umask(mode_t);
 extern int mkdir(const char *, mode_t);
+extern int mkdirat(int, const char *, mode_t);
 extern int mkfifo(const char *, mode_t);
 extern int stat(const char *, struct stat *);
 extern int fstat(int, struct stat *);
+extern int fstatat(int, const char *, struct stat *, int);
 extern int chmod(const char *, mode_t);
 
 #ifdef _BSD_EXTENSION

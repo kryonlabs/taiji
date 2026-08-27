@@ -48,6 +48,8 @@ open(const char *path, int flags, ...)
 	if(n >= 0){
 		fi = &_fdinfo[n];
 		fi->flags = FD_ISOPEN;
+		if(flags&O_CLOEXEC)
+			fi->flags |= FD_CLOEXEC;
 		fi->oflags = flags&(O_ACCMODE|O_NONBLOCK|O_APPEND);
 		fi->uid = -2;
 		fi->gid = -2;
@@ -56,6 +58,15 @@ open(const char *path, int flags, ...)
 			strcpy(fi->name, path);
 		if(fi->oflags&O_APPEND)
 			_SEEK(n, 0, 2);
+		if(flags&O_DIRECTORY){
+			struct stat st;
+
+			if(fstat(n, &st) < 0 || !S_ISDIR(st.st_mode)){
+				close(n);
+				errno = ENOTDIR;
+				return -1;
+			}
+		}
 	}
 	return n;
 }

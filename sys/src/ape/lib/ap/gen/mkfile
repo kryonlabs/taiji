@@ -25,6 +25,7 @@ ALLOFILES=\
 	memccpy.$O\
 	memchr.$O\
 	memcmp.$O\
+	memmem.$O\
 	memmove.$O\
 	memset.$O\
 	mktime.$O\
@@ -38,8 +39,10 @@ ALLOFILES=\
 	strcpy.$O\
 	strcspn.$O\
 	strdup.$O\
+	strndup.$O\
 	strftime.$O\
 	strlen.$O\
+	strnlen.$O\
 	strncat.$O\
 	strncmp.$O\
 	strncpy.$O\

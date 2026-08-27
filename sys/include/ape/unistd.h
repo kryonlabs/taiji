@@ -124,9 +124,11 @@ extern int chdir(const char *);
 extern int link(const char *, const char *);
 extern char *getcwd(char *, size_t);
 extern int unlink(const char *);
+extern int unlinkat(int, const char *, int);
 extern int rmdir(const char *);
 extern int rename(const char *, const char *);
 extern int access(const char *, int);
+extern int faccessat(int, const char *, int, int);
 extern long pathconf(const char *, int);
 extern long fpathconf(int, int);
 #ifdef __TYPES_H
@@ -135,6 +137,7 @@ extern int chown(const char *, uid_t, gid_t);
 
 /* input and output primitives */
 extern int pipe(int *);
+extern int pipe2(int *, int);
 extern int dup(int);
 extern int dup2(int, int);
 extern int close(int);

@@ -29,3 +29,23 @@ pipe(int fildes[2])
 	}
 	return 0;
 }
+
+int
+pipe2(int fildes[2], int flags)
+{
+	int i;
+
+	if(flags & ~(O_CLOEXEC|O_NONBLOCK)){
+		errno = EINVAL;
+		return -1;
+	}
+	if(pipe(fildes) < 0)
+		return -1;
+	for(i = 0; i < 2; i++){
+		if(flags&O_CLOEXEC)
+			_fdinfo[fildes[i]].flags |= FD_CLOEXEC;
+		if(flags&O_NONBLOCK)
+			_fdinfo[fildes[i]].oflags |= O_NONBLOCK;
+	}
+	return 0;
+}

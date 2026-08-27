@@ -31,6 +31,8 @@ extern void *calloc(size_t, size_t);
 extern void free(void *);
 extern void *malloc(size_t);
 extern void *realloc(void *, size_t);
+extern int posix_memalign(void **, size_t, size_t);
+extern void *aligned_alloc(size_t, size_t);
 extern void abort(void);
 extern int atexit(void (*func)(void));
 extern void exit(int);

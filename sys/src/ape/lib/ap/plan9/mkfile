@@ -17,7 +17,9 @@ OFILES=\
 	9wait.$O\
 	9write.$O\
 	access.$O\
+	aligned_alloc.$O\
 	alarm.$O\
+	at.$O\
 	brk.$O\
 	cfgetospeed.$O\
 	chdir.$O\
@@ -35,6 +37,7 @@ OFILES=\
 	dirstat.$O\
 	dirtostat.$O\
 	dup.$O\
+	eventfd.$O\
 	execl.$O\
 	execle.$O\
 	execlp.$O\
@@ -83,6 +86,7 @@ OFILES=\
 	signal.$O\
 	sigpending.$O\
 	sigprocmask.$O\
+	signalfd.$O\
 	sigsuspend.$O\
 	sleep.$O\
 	nanosleep.$O\
@@ -91,6 +95,7 @@ OFILES=\
 	system.$O\
 	tcgetattr.$O\
 	time.$O\
+	timerfd.$O\
 	times.$O\
 	tmpfile.$O\
 	ttyname.$O\

@@ -111,6 +111,8 @@ int	getc(FILE *);
 #define	getc(f)	((f)->rp>=(f)->wp? _IO_getc(f): *(f)->rp++)
 int	getchar(void);
 #define	getchar()	getc(stdin)
+ssize_t	getdelim(char **, size_t *, int, FILE *);
+ssize_t	getline(char **, size_t *, FILE *);
 char	*gets(char *);
 void	perror(const char *);
 int	printf(const char *, ...);

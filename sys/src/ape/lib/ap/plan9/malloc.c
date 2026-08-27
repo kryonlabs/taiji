@@ -32,6 +32,7 @@ static Arena arena;
 #define nil		((void*)0)
 
 extern	void	*sbrk(unsigned long);
+extern	void	_alignedfree(void *, void **);
 
 void*
 malloc(size_t size)
@@ -94,10 +95,13 @@ good:
 void
 free(void *ptr)
 {
+	void *base;
 	Bucket *bp, **l;
 
 	if(ptr == nil)
 		return;
+	_alignedfree(ptr, &base);
+	ptr = base;
 
 	/* Find the start of the structure */
 	bp = (Bucket*)((uint)ptr - datoff);

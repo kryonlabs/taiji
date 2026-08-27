@@ -59,6 +59,9 @@ The default and verified q9 NIC is `virtio-net-pci`.  Use
 `--net-device model` or `Q9_NET_DEVICE=model` to probe another QEMU NIC
 without editing the launcher.  q9 also exports `TMPDIR`, defaulting to `/tmp`,
 so QEMU snapshot scratch files do not depend on a writable `/var/tmp`.
+If your QEMU build still writes snapshot scratch files under `/var/tmp`, set
+`Q9_COPY_IMAGE=1`; q9 will copy the boot image into `$TMPDIR` and run that
+temporary copy without QEMU's snapshot mode.
 
 Use `--kernel name` or `Q9_KERNEL=name` to boot a different installed 386
 kernel.  For example, `--kernel pc` resolves to `ether0!/386/9pc`, and

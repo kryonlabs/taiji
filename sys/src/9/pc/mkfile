@@ -1,5 +1,5 @@
 CONF=pc
-CONFLIST=pc pccpu pcf pccpuf pcdisk pcfs pccpudisk
+CONFLIST=pc pcvirt pccpu pcf pccpuf pcdisk pcfs pccpudisk
 CRAPLIST=pccd pcflop pcinst pcauth pcall
 VENTILIST=pccpuf pcf pcfs pcauth
 EXTRACOPIES=

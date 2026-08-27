@@ -1,0 +1,77 @@
+# pcvirt - lean TaijiOS kernel for virtio-backed virtual machines
+dev
+	root
+	cons
+
+	arch
+	pnp		pci
+	env
+	pipe
+	proc
+	mnt
+	srv
+	dup
+	rtc
+	ssl
+	tls
+	cap
+	kprof
+	fs
+
+	ether		netif
+	ip		arp chandial ip ipv6 ipaux iproute netlog nullmedium pktmedium ptclbsum386 inferno
+
+	draw		screen vga vgax
+	mouse		mouse
+	vga
+	kbmap
+	kbin
+
+	sd
+	uart
+
+link
+	realmode
+
+	ethervirtio	pci
+	ethervirtio10	pci
+
+	ethermedium
+	netdevmedium
+	loopbackmedium
+
+misc
+	archmp		mp apic mpacpi
+	mtrr
+
+	sdvirtio	pci sdscsi
+	sdvirtio10	pci sdscsi
+
+	uarti8250
+	uartpci		pci
+	uartisa
+
+	vgavesa
+	vgavmware	+cur
+
+ip
+	tcp
+	udp
+	rudp
+	ipifc
+	icmp
+	icmp6
+	gre
+	ipmux
+	esp
+
+port
+	int cpuserver = 0;
+
+boot
+	tcp
+
+bootdir
+	boot$CONF.out boot
+	/386/bin/ip/ipconfig
+	/386/bin/auth/factotum

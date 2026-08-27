@@ -20,6 +20,14 @@
 #define O_DSYNC		0x1000
 #define	O_RSYNC		0x2000
 #define O_SYNC		0x4000
+#define O_CLOEXEC	0x8000
+#define O_DIRECTORY	0x10000
+#define O_NOFOLLOW	0x20000
+
+#define AT_FDCWD	-100
+#define AT_SYMLINK_NOFOLLOW	0x100
+#define AT_REMOVEDIR		0x200
+#define AT_EMPTY_PATH		0x1000
 
 #define	F_DUPFD		0	/* Duplicate fildes */
 #define	F_GETFD		1	/* Get fildes flags */
@@ -50,6 +58,7 @@ extern "C" {
 
 extern int fcntl(int, int, ...);
 extern int open(const char *, int, ...);
+extern int openat(int, const char *, int, ...);
 extern int creat(const char *, mode_t);
 
 #ifdef __cplusplus

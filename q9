@@ -22,6 +22,9 @@ buildlog=$state/build.log
 qemulog=$state/qemu.log
 socatlog=$state/socat.log
 monitorlog=$state/monitor.log
+copiedimage=
+driveimage=
+snapshotarg=-snapshot
 
 TMPDIR=${Q9_TMPDIR:-${TMPDIR:-/tmp}}
 export TMPDIR
@@ -339,9 +342,32 @@ write_predesktoprc()
 cleanup_runtime()
 {
 	rm -f "$serialsock" "$monitorsock"
+	if [ "${copiedimage:-}" ]; then
+		rm -f "$copiedimage"
+	fi
 	rmdir "$sessionlock" 2>/dev/null || true
 	rm -f "$runlock/pid" 2>/dev/null || true
 	rmdir "$runlock" 2>/dev/null || true
+}
+
+prepare_drive_image()
+{
+	case "$image" in
+	/*)
+		srcimage=$image
+		;;
+	*)
+		srcimage=$root/$image
+		;;
+	esac
+	driveimage=$srcimage
+	snapshotarg=-snapshot
+	if [ "${Q9_COPY_IMAGE:-0}" = 1 ]; then
+		copiedimage=$TMPDIR/q9-image-$$.raw
+		cp "$srcimage" "$copiedimage"
+		driveimage=$copiedimage
+		snapshotarg=
+	fi
 }
 
 qemu_autosave()
@@ -488,6 +514,16 @@ save_session()
 
 qemu_common()
 {
+	if [ -z "${driveimage:-}" ]; then
+		case "$image" in
+		/*)
+			driveimage=$image
+			;;
+		*)
+			driveimage=$root/$image
+			;;
+		esac
+	fi
 	u9fs="guestfwd=tcp:10.0.2.1:564-cmd:$root/sys/src/cmd/unix/u9fs/u9fs -a none -u ${USER:-none} $root"
 	if [ "$headless" = true ]; then
 		set -- -display none -vnc 127.0.0.1:${Q9_VNC_DISPLAY:-1} \
@@ -498,7 +534,7 @@ qemu_common()
 		if [ "$fresh" != true ] && has_checkpoint; then
 			echo "q9: resuming pre-desktop checkpoint: $sessionstate" >&2
 			"$qemu" -m "$mem" -smp "$smp" \
-				-drive file="$root/$image",format=raw -snapshot \
+				-drive file="$driveimage",format=raw $snapshotarg \
 				-device "$netdevice,netdev=net0,mac=$mac" \
 				-netdev "user,id=net0,$u9fs,$tftp" \
 				-monitor "unix:$monitorsock,server=on,wait=off" \
@@ -508,7 +544,7 @@ qemu_common()
 		else
 			echo 'q9: no pre-desktop checkpoint; cold booting' >&2
 			"$qemu" -m "$mem" -smp "$smp" \
-				-drive file="$root/$image",format=raw -snapshot \
+				-drive file="$driveimage",format=raw $snapshotarg \
 				-device "$netdevice,netdev=net0,mac=$mac" \
 				-netdev "user,id=net0,$u9fs,$tftp" \
 				-monitor "unix:$monitorsock,server=on,wait=off" \
@@ -517,7 +553,7 @@ qemu_common()
 		fi
 	else
 		"$qemu" -m "$mem" -smp "$smp" \
-			-drive file="$root/$image",format=raw -snapshot \
+			-drive file="$driveimage",format=raw $snapshotarg \
 			-device "$netdevice,netdev=net0,mac=$mac" \
 			-netdev "user,id=net0,$u9fs,$tftp" "$@"
 	fi
@@ -527,6 +563,7 @@ run_foreground()
 {
 	write_kernel_pxe
 	build_u9fs
+	prepare_drive_image
 	if [ "$textonly" = true ]; then
 		qemu_common -display none -serial stdio
 	else
@@ -583,6 +620,7 @@ run_clean()
 	fi
 	write_kernel_pxe
 	build_u9fs
+	prepare_drive_image
 	rm -f "$seriallog" "$serialsock" "$monitorsock" "$monitorlog"
 	hadsession=false
 	if qemu_autosave && [ "$fresh" != true ] && has_checkpoint; then
@@ -646,13 +684,13 @@ run_clean()
 }
 
 case "$mode" in
-console|shell)
-	clear_runrc
-	if [ "$raw" = true ]; then
-		trap clear_runrc EXIT HUP INT TERM
-		write_predesktoprc
-		run_foreground
-	else
+	console|shell)
+		clear_runrc
+		if [ "$raw" = true ]; then
+			trap 'cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+			write_predesktoprc
+			run_foreground
+		else
 		run_clean
 	fi
 	;;
@@ -662,11 +700,11 @@ run)
 		usage 1
 	fi
 	[ $# -gt 0 ] || usage
-	write_runrc "$*"
-	if [ "$raw" = true ]; then
-		trap clear_runrc EXIT HUP INT TERM
-		run_foreground
-	else
+		write_runrc "$*"
+		if [ "$raw" = true ]; then
+			trap 'cleanup_runtime; clear_runrc' EXIT HUP INT TERM
+			run_foreground
+		else
 		run_clean
 	fi
 	;;

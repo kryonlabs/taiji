@@ -34,6 +34,7 @@ OFILES=\
 	fwrite.$O\
 	getc.$O\
 	getchar.$O\
+	getdelim.$O\
 	gets.$O\
 	perror.$O\
 	pow10.$O\
