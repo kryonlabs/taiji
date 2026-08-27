@@ -31,12 +31,17 @@ cfg/q9/run.rc
 cfg/q9/run.rc.*
 cfg/q9/prerio.rc
 cfg/q9/prerio.rc.*
+cfg/q9/predesktop.rc
+cfg/q9/predesktop.rc.*
 boot/q9/*.ppm
 boot/q9/*.png
 boot/q9/*.err
 boot/q9/test.log
 boot/q9/nsselector-build.log
+boot/q9/rill-loading-build.log
 boot/q9/tty.log
+boot/q9/visible-namespace-selector.log
+boot/q9/visible-rill-loading.log
 boot/q9/probe.ppm
 sys/src/9/pc/9pc
 sys/src/9/pc/9pcvirt

@@ -194,10 +194,22 @@ hit(Point p)
 void
 startsession(Session *s)
 {
+	int fd;
+
 	putenv("namespace", s->id);
 	putenv("session", s->id);
-	execl("/bin/rc", "rc", "-c", s->command, nil);
-	sysfatal("exec %s failed: %r", s->command);
+	switch(rfork(RFPROC|RFFDG|RFENVG|RFNOTEG)){
+	case -1:
+		sysfatal("rfork %s failed: %r", s->command);
+	case 0:
+		for(fd = 3; fd < 64; fd++)
+			close(fd);
+		sleep(250);
+		execl("/bin/rc", "rc", "-c", s->command, nil);
+		sysfatal("exec %s failed: %r", s->command);
+	default:
+		exits(nil);
+	}
 }
 
 void

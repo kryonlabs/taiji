@@ -1,0 +1,14 @@
+term=/sys/src/kryon/icons/text.png
+folder=/sys/src/kryon/icons/home.png
+ctl=/sys/src/kryon/icons/gear.png
+comp=/sys/src/kryon/icons/stack.png
+doc=/sys/src/kryon/icons/manual.png
+bin=/sys/src/kryon/icons/trash.png
+acme=/sys/src/kryon/icons/edit.png
+stats=/sys/src/kryon/icons/stat.png
+clock=/sys/src/kryon/icons/calendar.png
+game=/sys/src/kryon/icons/play.png
+inbe=/sys/src/kryon/icons/proj/inbe.png
+jot=/sys/src/kryon/icons/pencil.png
+settings=/sys/src/kryon/icons/gear.png
+about=/sys/src/kryon/icons/kryon.png
