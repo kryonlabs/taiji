@@ -1,0 +1,3 @@
+# id|display name|description|command
+plan9|Plan 9|Original Rio namespace|rio9 -k 'rc -i'
+rill|Rill|Taiji desktop namespace|rill

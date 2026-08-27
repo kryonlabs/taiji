@@ -48,11 +48,20 @@ case terminal
 	}
 	if(test -r /cfg/q9/predesktop.rc)
 		. /cfg/q9/predesktop.rc
-	echo q9: gui ready
-	if(test -x /bin/rill)
-		exec rill
-	echo 'profile: /bin/rill not found' >[1=2]
-	exec rc
+	while(){
+		echo q9: gui ready
+		if(test -x /bin/nsselect){
+			nsselect
+			if(! ~ $status '')
+				exec rc
+		}
+		if not if(test -x /bin/rill)
+			rill
+		if not {
+			echo 'profile: /bin/nsselect and /bin/rill not found' >[1=2]
+			exec rc
+		}
+	}
 case cpu
 	if (test -e /mnt/term/mnt/wsys) { # window system already running
 		bind -a /mnt/term/mnt/wsys /dev
