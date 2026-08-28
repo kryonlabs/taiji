@@ -10,6 +10,7 @@ Examples:
 	./q9 --text
 	./q9 tty
 	./q9 --smp 2
+	./q9 --gpu vmware
 	./q9 --kernel pc
 	./q9 --kernel /sys/src/9/pc/9pc
 	./q9 --rebuild-desktop
@@ -62,6 +63,12 @@ so QEMU snapshot scratch files do not depend on a writable `/var/tmp`.
 If your QEMU build still writes snapshot scratch files under `/var/tmp`, set
 `Q9_COPY_IMAGE=1`; q9 will copy the boot image into `$TMPDIR` and run that
 temporary copy without QEMU's snapshot mode.
+
+The default graphical adapter is QEMU's standard VGA path using TaijiOS'
+VESA framebuffer setup.  Use `--gpu vmware` or `Q9_GPU=vmware` to boot
+with QEMU's VMware SVGA adapter and the matching q9 PXE profile.  This
+uses TaijiOS' existing VMware SVGA framebuffer driver; it is not a
+virtio-gpu or 3D acceleration path.
 
 Use `--kernel name` or `Q9_KERNEL=name` to boot a different installed 386
 kernel.  For example, `--kernel pc` resolves to `ether0!/386/9pc`, and

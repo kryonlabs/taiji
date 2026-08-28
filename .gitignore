@@ -39,6 +39,7 @@ boot/q9/*.err
 boot/q9/test.log
 boot/q9/nsselector-build.log
 boot/q9/rill-loading-build.log
+boot/q9/rill-handoff-verify.log
 boot/q9/tty.log
 boot/q9/visible-namespace-selector.log
 boot/q9/visible-rill-loading.log

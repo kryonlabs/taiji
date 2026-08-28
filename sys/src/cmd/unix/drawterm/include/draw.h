@@ -60,7 +60,7 @@ enum
 
 enum
 {
-	Displaybufsize	= 8000,
+	Displaybufsize	= 64*1024,
 	ICOSSCALE	= 1024,
 	Borderwidth =	4,
 };

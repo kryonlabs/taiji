@@ -5,22 +5,56 @@ cd $(dirname $0)
 
 pxe=pxeboot.raw
 vmdisk=false
-case "$1" in
--pxenew)
-	pxe=pxeboot.raw.new
-	shift
-	;;
--mini)
-	pxe=mini.raw
-	shift
-esac
+gpu=${Q9_GPU:-vesa}
+qemuvga=
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-pxenew)
+		pxe=pxeboot.raw.new
+		shift
+		;;
+	-mini)
+		pxe=mini.raw
+		shift
+		;;
+	--gpu|-gpu)
+		[ $# -ge 2 ] || {
+			echo 'usage: boot/qemu [-pxenew] [-mini] [--gpu vesa|vmware]' >&2
+			exit 1
+		}
+		gpu=$2
+		shift 2
+		;;
+	*)
+		break
+		;;
+	esac
+done
 
 case "$#" in
 0)
 	;;
 *)
-	echo 'usage: boot/qemu [-pxenew]' >&2
+	echo 'usage: boot/qemu [-pxenew] [-mini] [--gpu vesa|vmware]' >&2
 	exit 1
+esac
+
+case "$gpu" in
+''|vesa|std|standard)
+	gpu=vesa
+	macaddr=52:54:00:12:34:56
+	;;
+vmware|vmware-svga)
+	gpu=vmware
+	macaddr=52:54:00:12:34:5a
+	qemuvga=vmware
+	;;
+*)
+	echo "boot/qemu: unknown GPU model: $gpu" >&2
+	echo 'boot/qemu: supported GPU models: vesa, vmware' >&2
+	exit 1
+	;;
 esac
 
 echo '# building u9fs' >&2
@@ -28,9 +62,16 @@ make -C ../sys/src/cmd/unix/u9fs
 
 u9fs="guestfwd=tcp:10.0.2.1:564-cmd:../sys/src/cmd/unix/u9fs/u9fs -a none -u $USER .."
 tftp='tftp=..'
-mac=mac=52:54:00:12:34:56
+mac=mac=$macaddr
+
+if [ "$qemuvga" ]; then
+	set -- -vga "$qemuvga"
+else
+	set --
+fi
 
 qemu-system-x86_64 -m 1G -smp 1 -serial stdio \
+	"$@" \
 	-drive file=$pxe,format=raw -snapshot \
 	-device virtio-net-pci,netdev=net0,$mac \
 	-netdev "user,id=net0,$u9fs,$tftp"

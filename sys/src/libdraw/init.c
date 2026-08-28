@@ -290,7 +290,7 @@ initdisplay(char *dev, char *win, void(*error)(Display*, char*))
 	disp->_isnewdisplay = isnew;
 	disp->bufsize = iounit(datafd);
 	if(disp->bufsize <= 0)
-		disp->bufsize = 8000;
+		disp->bufsize = Displaybufsize;
 	if(disp->bufsize < 512){
 		werrstr("iounit %d too small", disp->bufsize);
 		goto Error5;

@@ -1590,7 +1590,8 @@ drawmesg(Client *client, void *av, int n)
 			drawpoint(&q, a+37);
 			op = drawclientop(client);
 			memdraw(dst, r, src, p, mask, q, op);
-			dstflush(dstid, dst, r);
+			if(rectclip(&r, dst->clipr))
+				dstflush(dstid, dst, r);
 			continue;
 
 		/* toggle debugging: 'D' val[1] */

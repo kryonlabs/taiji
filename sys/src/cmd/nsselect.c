@@ -1,7 +1,8 @@
 #include <u.h>
 #include <libc.h>
 #include <draw.h>
-#include <event.h>
+#include <thread.h>
+#include <mouse.h>
 #include <keyboard.h>
 
 enum {
@@ -12,16 +13,23 @@ enum {
 };
 
 typedef struct Session Session;
+typedef struct Launch Launch;
 struct Session {
 	char id[Fieldlen];
 	char name[Fieldlen];
 	char desc[Fieldlen];
 	char command[Cmdlen];
 };
+struct Launch {
+	char id[Fieldlen];
+	char command[Cmdlen];
+};
 
 Session sessions[Maxsessions];
 int nsessions;
 int selected;
+int launchfd = -1;
+int launchpid = -1;
 
 Image *back;
 Image *panel;
@@ -30,6 +38,13 @@ Image *edge;
 Image *text;
 Image *muted;
 Image *accent;
+Mousectl *mousectl;
+Keyboardctl *keyboardctl;
+Alt alts[4];
+Mouse mouse;
+Rune key;
+int resize;
+int mainstacksize = 32*1024;
 
 char *catalog = "/lib/namespace.sessions";
 
@@ -173,9 +188,9 @@ redraw(void)
 }
 
 void
-eresized(int new)
+resized(void)
 {
-	if(new && getwindow(display, Refnone) < 0)
+	if(getwindow(display, Refnone) < 0)
 		sysfatal("can't reattach to window");
 	redraw();
 }
@@ -192,24 +207,134 @@ hit(Point p)
 }
 
 void
+waitmousefree(void)
+{
+	int fd, i;
+
+	for(i = 0; i < 50; i++){
+		fd = open("/dev/mouse", ORDWR);
+		if(fd >= 0){
+			close(fd);
+			return;
+		}
+		sleep(100);
+	}
+}
+
+int
+readfull(int fd, void *buf, int n)
+{
+	char *p;
+	int r, total;
+
+	p = buf;
+	total = 0;
+	while(total < n){
+		r = read(fd, p + total, n - total);
+		if(r <= 0)
+			return total;
+		total += r;
+	}
+	return total;
+}
+
+int
+writefull(int fd, void *buf, int n)
+{
+	char *p;
+	int r, total;
+
+	p = buf;
+	total = 0;
+	while(total < n){
+		r = write(fd, p + total, n - total);
+		if(r <= 0)
+			return total;
+		total += r;
+	}
+	return total;
+}
+
+void
+launcher(int fd)
+{
+	Launch l;
+
+	memset(&l, 0, sizeof l);
+	if(readfull(fd, &l, sizeof l) != sizeof l)
+		exits(nil);
+	close(fd);
+	if(l.id[0] == 0 || l.command[0] == 0)
+		exits("empty launch");
+	putenv("namespace", l.id);
+	putenv("session", l.id);
+	waitmousefree();
+	execl("/bin/rc", "rc", "-c", l.command, nil);
+	sysfatal("exec %s failed: %r", l.command);
+}
+
+void
+startlauncher(void)
+{
+	int fd[2], pid;
+
+	if(pipe(fd) < 0)
+		sysfatal("launcher pipe failed: %r");
+	switch(pid = rfork(RFPROC|RFFDG|RFENVG|RFNOTEG)){
+	case -1:
+		sysfatal("launcher rfork failed: %r");
+	case 0:
+		close(fd[1]);
+		launcher(fd[0]);
+		exits(nil);
+	default:
+		close(fd[0]);
+		launchfd = fd[1];
+		launchpid = pid;
+		break;
+	}
+}
+
+void
+waitsession(void)
+{
+	Waitmsg *w;
+
+	while((w = wait()) != nil){
+		if(w->pid == launchpid){
+			if(w->msg[0] != 0)
+				exits(w->msg);
+			free(w);
+			return;
+		}
+		free(w);
+	}
+}
+
+void
 startsession(Session *s)
 {
-	int fd;
+	Launch l;
 
-	putenv("namespace", s->id);
-	putenv("session", s->id);
-	switch(rfork(RFPROC|RFFDG|RFENVG|RFNOTEG)){
-	case -1:
-		sysfatal("rfork %s failed: %r", s->command);
-	case 0:
-		for(fd = 3; fd < 64; fd++)
-			close(fd);
-		sleep(250);
-		execl("/bin/rc", "rc", "-c", s->command, nil);
-		sysfatal("exec %s failed: %r", s->command);
-	default:
-		exits(nil);
+	if(keyboardctl != nil){
+		closekeyboard(keyboardctl);
+		keyboardctl = nil;
 	}
+	if(mousectl != nil){
+		closemouse(mousectl);
+		mousectl = nil;
+	}
+	if(display != nil)
+		closedisplay(display);
+	memset(&l, 0, sizeof l);
+	copystr(l.id, sizeof l.id, s->id);
+	copystr(l.command, sizeof l.command, s->command);
+	if(launchfd < 0 || writefull(launchfd, &l, sizeof l) != sizeof l)
+		sysfatal("launch %s failed: %r", s->command);
+	close(launchfd);
+	launchfd = -1;
+	waitsession();
+	threadexitsall(nil);
 }
 
 void
@@ -220,10 +345,9 @@ usage(void)
 }
 
 void
-main(int argc, char **argv)
+threadmain(int argc, char **argv)
 {
-	Event e;
-	int key, h;
+	int h;
 
 	ARGBEGIN{
 	case 'c':
@@ -237,8 +361,15 @@ main(int argc, char **argv)
 
 	if(loadsessions(catalog) <= 0)
 		sysfatal("no namespace sessions in %s", catalog);
+	startlauncher();
 	if(initdraw(nil, nil, "namespace") < 0)
 		sysfatal("initdraw failed: %r");
+	mousectl = initmouse(nil, screen);
+	if(mousectl == nil)
+		sysfatal("initmouse failed: %r");
+	keyboardctl = initkeyboard(nil);
+	if(keyboardctl == nil)
+		sysfatal("initkeyboard failed: %r");
 	back = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x15202aff);
 	panel = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x243240ff);
 	panelhi = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x31516cff);
@@ -246,19 +377,34 @@ main(int argc, char **argv)
 	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xf2f7fbff);
 	muted = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xaebbc6ff);
 	accent = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x70c0e8ff);
-	einit(Emouse|Ekeyboard);
+	alts[0].c = mousectl->c;
+	alts[0].v = &mouse;
+	alts[0].op = CHANRCV;
+	alts[1].c = mousectl->resizec;
+	alts[1].v = &resize;
+	alts[1].op = CHANRCV;
+	alts[2].c = keyboardctl->c;
+	alts[2].v = &key;
+	alts[2].op = CHANRCV;
+	alts[3].op = CHANEND;
 	redraw();
 	for(;;){
-		key = event(&e);
-		if(key == Emouse && (e.mouse.buttons & 1)){
-			h = hit(e.mouse.xy);
+		switch(alt(alts)){
+		case 0:
+			if((mouse.buttons & 1) == 0)
+				break;
+			h = hit(mouse.xy);
 			if(h >= 0){
 				selected = h;
 				redraw();
 				startsession(&sessions[selected]);
 			}
-		}else if(key == Ekeyboard){
-			switch(e.kbdc){
+			break;
+		case 1:
+			resized();
+			break;
+		case 2:
+			switch(key){
 			case Kleft:
 			case Kup:
 				if(selected > 0)
@@ -278,8 +424,9 @@ main(int argc, char **argv)
 				break;
 			case Kesc:
 			case Keof:
-				exits("cancel");
+				threadexitsall("cancel");
 			}
+			break;
 		}
 	}
 }

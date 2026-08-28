@@ -37,6 +37,8 @@ mac=$guimac
 mem=${Q9_MEM:-1G}
 smp=${Q9_SMP:-1}
 netdevice=${Q9_NET_DEVICE:-virtio-net-pci}
+gpu=${Q9_GPU:-vesa}
+qemuvga=
 boottimeout=${Q9_BOOT_TIMEOUT:-120}
 profile=true
 textonly=false
@@ -44,6 +46,7 @@ autosave=${Q9_CHECKPOINT:-0}
 builddesktop=${Q9_BUILD_DESKTOP:-0}
 kernel=${Q9_KERNEL:-}
 kernelmac=${Q9_KERNEL_MAC:-52:54:00:12:34:59}
+vmwaremac=${Q9_VMWARE_MAC:-52:54:00:12:34:5a}
 fresh=false
 hadsession=false
 headless=false
@@ -52,10 +55,10 @@ usage()
 {
 	status=${1:-1}
 	cat >&2 <<EOF
-usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] [console|shell|tty|gui]
-       ./q9 [--text] [--mini] [--raw] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] run command
-       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] tty-run command
-       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] acme|rill [args...]
+usage: ./q9 [--text] [--mini] [--raw] [--headless] [--fresh] [--no-autosave] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] [--gpu model] [console|shell|tty|gui]
+       ./q9 [--text] [--mini] [--raw] [--rebuild-desktop] [--kernel name|path] [--smp n] [--net-device model] [--gpu model] run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] [--gpu model] tty-run command
+       ./q9 [--mini] [--raw] [--kernel name|path] [--smp n] [--net-device model] [--gpu model] acme|rill [args...]
 
 Default mode boots Glenda's normal graphical TaijiOS profile.
 Default graphical mode cold-boots reliably. QEMU vmstate checkpoints are
@@ -68,6 +71,7 @@ Use --rebuild-desktop or Q9_BUILD_DESKTOP=1 to rebuild desktop tools before grap
 Use --kernel name or Q9_KERNEL=name to boot /386/9name, or pass an explicit path.
 Use --smp n or Q9_SMP=n to expose n CPUs to QEMU.
 Use --net-device model or Q9_NET_DEVICE=model to test a QEMU NIC model.
+Use --gpu vesa|vmware or Q9_GPU=vesa|vmware to select the QEMU display adapter.
 TaijiOS MP stays disabled in q9 profiles until the LAPIC clock panic is fixed.
 EOF
 	exit "$status"
@@ -145,6 +149,11 @@ while [ $# -gt 0 ]; do
 		netdevice=$2
 		shift 2
 		;;
+	--gpu)
+		[ $# -ge 2 ] || usage
+		gpu=$2
+		shift 2
+		;;
 	--help|-h)
 		usage 0
 		;;
@@ -193,6 +202,27 @@ fi
 if [ "$mode" = run ] && [ "$raw" != true ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
 	raw=true
 fi
+
+case "$gpu" in
+''|vesa|std|standard)
+	gpu=vesa
+	qemuvga=
+	;;
+vmware|vmware-svga)
+	gpu=vmware
+	qemuvga=vmware
+	;;
+*)
+	echo "q9: unknown GPU model: $gpu" >&2
+	echo "q9: supported GPU models: vesa, vmware" >&2
+	exit 1
+	;;
+esac
+if [ "$gpu" = vmware ] && [ "$textonly" != true ] &&
+    { [ "$profile" = true ] || [ "$mode" = run ]; }; then
+	mac=$vmwaremac
+fi
+
 basemac=$mac
 if [ "$kernel" ]; then
 	mac=$kernelmac
@@ -324,6 +354,9 @@ write_predesktoprc()
 			printf 'echo q9: checking shelf\n'
 			printf 'cd /sys/src/shelf\n'
 			printf 'mk install\n'
+			printf 'echo q9: checking namespace selector\n'
+			printf 'cd /sys/src/cmd\n'
+			printf 'mk nsselect.install\n'
 			printf 'echo q9: checking rill\n'
 			printf 'cd /sys/src/cmd/rill\n'
 			printf 'mk install\n'
@@ -384,7 +417,8 @@ has_checkpoint()
 {
 	[ -s "$sessionstate" ] || return 1
 	[ -r "$sessionmeta" ] || return 1
-	grep -q '^pre-desktop$' "$sessionmeta"
+	grep -q "^pre-desktop $gpu$" "$sessionmeta" && return 0
+	[ "$gpu" = vesa ] && grep -q '^pre-desktop$' "$sessionmeta"
 }
 
 acquire_runlock()
@@ -490,7 +524,7 @@ save_session()
 		if hmp 'info migrate' | grep -qi 'completed'; then
 			if [ -s "$sessiontmp" ]; then
 				mv "$sessiontmp" "$sessionstate"
-				printf 'pre-desktop\n' >"$sessionmeta"
+				printf 'pre-desktop %s\n' "$gpu" >"$sessionmeta"
 				echo "q9: saved session: $sessionstate" >&2
 			fi
 			if [ "$action" = continue ]; then
@@ -528,6 +562,9 @@ qemu_common()
 	if [ "$headless" = true ]; then
 		set -- -display none -vnc 127.0.0.1:${Q9_VNC_DISPLAY:-1} \
 			-monitor "unix:$monitorsock,server=on,wait=off" "$@"
+	fi
+	if [ "$qemuvga" ]; then
+		set -- -vga "$qemuvga" "$@"
 	fi
 	tftp="tftp=$root"
 	if qemu_autosave; then
