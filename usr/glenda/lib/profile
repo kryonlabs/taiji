@@ -48,6 +48,12 @@ case terminal
 	}
 	if(test -r /cfg/q9/predesktop.rc)
 		. /cfg/q9/predesktop.rc
+	if(~ $q9web 1){
+		if(test -x /bin/rill)
+			exec rill
+		echo 'profile: /bin/rill not found' >[1=2]
+		exec rc
+	}
 	while(){
 		echo q9: gui ready
 		if(test -x /bin/nsselect){

@@ -10,7 +10,7 @@
   <meta property="og:url" content="https://taijios.net/">
   <title>TaijiOS</title>
   <link rel="icon" href="favicon.ico" sizes="32x32">
-  <link rel="stylesheet" href="css/style.css?v=20260826-q9hw">
+  <link rel="stylesheet" href="css/style.css?v=20260830-fullpage">
 </head>
 <body>
   <header class="topbar">
@@ -30,9 +30,9 @@
       <div class="hero-copy">
         <p class="eyebrow">Kryon Labs operating system</p>
         <h1>TaijiOS</h1>
-        <p class="lead">The flagship Kryon Labs OS: a bootable Plan 9-based desktop with Shelf, Rill, ktrem, and the Kryon application stack preinstalled.</p>
+        <p class="lead">The flagship Kryon Labs OS, booting directly into the TaijiOS desktop in your browser.</p>
         <div class="hero-actions">
-          <button class="primary-action" id="start-emulator" type="button">Start TaijiOS</button>
+          <button class="primary-action" id="start-emulator" type="button">Launch TaijiOS</button>
           <a class="secondary-action" href="#local">Run locally</a>
         </div>
       </div>
@@ -44,7 +44,7 @@
             <span id="emulator-status">Ready</span>
           </div>
           <div class="toolbar-actions">
-            <button class="boot-choice" data-boot-choice="1" type="button" disabled>Desktop</button>
+            <button class="boot-choice" data-boot-choice="1" type="button" disabled>TaijiOS</button>
             <button class="boot-choice" data-boot-choice="2" type="button" disabled>Console</button>
             <button id="reset-emulator" type="button" disabled>Reset</button>
             <button id="fullscreen-emulator" type="button">Fullscreen</button>
@@ -57,8 +57,8 @@
           </div>
           <div class="screen-placeholder" id="screen-placeholder">
             <img src="assets/taijios-desktop.png" alt="TaijiOS desktop with Explorer open">
-            <p>Browser boot uses a WASM x86 emulator and the TaijiOS web boot image.</p>
-            <p class="placeholder-note">Serve this page over HTTP, then start the emulator.</p>
+            <p>Starting the TaijiOS desktop in the browser.</p>
+            <p class="placeholder-note">The VM runs full page here; use Fullscreen for browser fullscreen.</p>
           </div>
         </div>
       </section>
@@ -86,7 +86,7 @@
       <article>
         <span>Browser</span>
         <strong>Experimental WASM boot</strong>
-        <p>The website stages a mini raw image for v86 and keeps QEMU-specific host mounts out of the browser path.</p>
+        <p>The website stages a mini raw image for v86 and starts the Rill-based TaijiOS desktop directly.</p>
       </article>
       <article>
         <span>Deploy</span>
@@ -101,6 +101,6 @@
     <a href="https://github.com/kryonlabs/taiji">Source</a>
   </footer>
 
-  <script src="js/taijios-web.js?v=20260826-q9hw" defer></script>
+  <script src="js/taijios-web.js?v=20260830-fullpage" defer></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
   "use strict";
 
   const v86Base = "assets/v86";
-  const assetVersion = "20260826-q9hw";
+  const assetVersion = "20260830-fullpage";
   const versioned = (path) => `${path}?v=${assetVersion}`;
   const emulatorConfig = {
     wasm_path: versioned(`${v86Base}/v86.wasm`),
@@ -77,9 +77,11 @@
       emulator = new V86Constructor(emulatorConfig);
       window.taijiosEmulator = emulator;
       wireEmulatorEvents(emulator);
+      startButton.textContent = "TaijiOS Running";
       setStatus("Booting", "running");
     } catch (error) {
       startButton.disabled = false;
+      startButton.textContent = "Retry Launch";
       resetButton.disabled = true;
       setStatus("Could not start browser boot", "error");
       placeholder.classList.remove("is-hidden");
@@ -102,7 +104,7 @@
       resetButton.disabled = false;
       setBootChoicesEnabled(true);
       maybeAutoBoot(instance);
-      setStatus("Ready to boot", "ready");
+      setStatus("Launching TaijiOS", "ready");
     });
     instance.add_listener("emulator-started", () => {
       resetButton.disabled = false;
@@ -129,7 +131,7 @@
       return;
     }
     emulator.keyboard_send_text(`${choice}\n`);
-    setStatus(`Boot option ${choice} sent`, "running");
+    setStatus(choice === "1" ? "Launching TaijiOS" : `Boot option ${choice} sent`, "running");
   }
 
   function maybeAutoBoot(instance) {
@@ -193,7 +195,7 @@
   });
 
   setStatus("Ready", "ready");
-  if (new URLSearchParams(window.location.search).get("autostart") === "1") {
+  if (new URLSearchParams(window.location.search).get("autostart") !== "0") {
     startEmulator();
   }
 })();

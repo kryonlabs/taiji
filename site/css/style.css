@@ -42,8 +42,10 @@ button {
 }
 
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -51,7 +53,7 @@ button {
   gap: 24px;
   padding: 16px clamp(18px, 4vw, 56px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(17, 19, 18, 0.86);
+  background: rgba(17, 19, 18, 0.74);
   backdrop-filter: blur(18px);
 }
 
@@ -92,17 +94,26 @@ button {
 }
 
 .hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(280px, 0.82fr) minmax(360px, 1.18fr);
-  gap: clamp(28px, 4vw, 56px);
-  align-items: center;
-  min-height: calc(100vh - 64px);
-  padding: clamp(32px, 6vw, 86px) clamp(18px, 4vw, 56px) 42px;
+  min-height: 100vh;
+  padding: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #050705;
 }
 
 .hero-copy {
-  max-width: 650px;
+  position: absolute;
+  left: clamp(18px, 4vw, 56px);
+  bottom: clamp(20px, 4vw, 44px);
+  z-index: 3;
+  width: min(560px, calc(100% - 36px));
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(17, 19, 18, 0.76);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
 }
 
 .eyebrow {
@@ -122,7 +133,7 @@ h2 {
 }
 
 h1 {
-  font-size: clamp(56px, 9vw, 132px);
+  font-size: clamp(38px, 7vw, 86px);
 }
 
 h2 {
@@ -132,16 +143,16 @@ h2 {
 
 .lead {
   max-width: 580px;
-  margin: 22px 0 0;
+  margin: 14px 0 0;
   color: var(--muted);
-  font-size: clamp(18px, 2vw, 22px);
+  font-size: clamp(16px, 1.6vw, 19px);
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 30px;
+  margin-top: 20px;
 }
 
 .primary-action,
@@ -175,23 +186,32 @@ h2 {
 }
 
 .emulator-panel {
+  position: relative;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
 .emulator-toolbar {
+  position: absolute;
+  top: 64px;
+  left: clamp(12px, 2vw, 24px);
+  right: clamp(12px, 2vw, 24px);
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-height: 52px;
   padding: 10px 12px 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(32, 38, 31, 0.78);
+  box-shadow: 0 14px 46px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
 }
 
 .status-group {
@@ -246,8 +266,8 @@ h2 {
 
 .screen-shell {
   position: relative;
-  aspect-ratio: 16 / 10;
-  min-height: 360px;
+  width: 100%;
+  min-height: 100vh;
   background:
     linear-gradient(rgba(216, 239, 113, 0.03) 50%, transparent 50%) 0 0 / 100% 4px,
     #050705;
@@ -269,7 +289,7 @@ h2 {
 .screen-text {
   white-space: pre;
   overflow: hidden;
-  padding: 18px;
+  padding: 142px clamp(18px, 3vw, 44px) 160px;
   color: #dcefb0;
   font: 14px/1.35 "Berkeley Mono", "SFMono-Regular", Consolas, monospace;
 }
@@ -289,7 +309,7 @@ h2 {
   align-items: center;
   justify-items: center;
   gap: 8px;
-  padding: 28px;
+  padding: 124px 28px 180px;
   color: var(--muted);
   text-align: center;
   background: radial-gradient(circle at 50% 30%, rgba(216, 239, 113, 0.09), transparent 38%);
@@ -407,18 +427,18 @@ h2 {
 }
 
 @media (max-width: 880px) {
-  .hero,
   .info-band,
   .status-grid {
     grid-template-columns: 1fr;
   }
 
-  .hero {
-    min-height: auto;
+  .hero-copy {
+    right: 18px;
+    width: auto;
   }
 
-  .screen-shell {
-    min-height: 300px;
+  .screen-text {
+    padding-bottom: 220px;
   }
 }
 
@@ -436,14 +456,27 @@ h2 {
   .emulator-toolbar {
     align-items: stretch;
     flex-direction: column;
+    top: 112px;
   }
 
   .toolbar-actions button {
     flex: 1 1 72px;
   }
 
-  .screen-shell {
-    aspect-ratio: 4 / 3;
-    min-height: 260px;
+  .hero-copy {
+    padding: 14px;
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+  }
+
+  .hero-actions {
+    margin-top: 14px;
+  }
+
+  .screen-text {
+    padding-top: 216px;
+    padding-bottom: 236px;
   }
 }
