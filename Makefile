@@ -14,6 +14,7 @@ site:
 	test -f "$(SITE_BUILD_DIR)/favicon.ico"
 	test -f "$(SITE_BUILD_DIR)/css/style.css"
 	test -f "$(SITE_BUILD_DIR)/js/taijios-web.js"
+	test -f "$(SITE_BUILD_DIR)/assets/taijios-banner.png"
 	test -f "$(SITE_BUILD_DIR)/assets/taijios-desktop.png"
 	test -f "$(SITE_WEB_IMAGE)"
 	test -f "$(SITE_BUILD_DIR)/assets/v86/libv86.js"

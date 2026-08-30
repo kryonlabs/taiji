@@ -1,5 +1,9 @@
 # TaijiOS
 
+[![Netlify](https://github.com/kryonlabs/taiji/actions/workflows/netlify.yml/badge.svg)](https://github.com/kryonlabs/taiji/actions/workflows/netlify.yml)
+
+![TaijiOS desktop banner](site/assets/taijios-banner.png)
+
 TaijiOS is Kryon Labs' flagship operating system: a bootable desktop OS
 tree based on the 9legacy branch of Plan 9 from Bell Labs, with Kryon
 applications preinstalled as the default working environment.
@@ -7,6 +11,20 @@ applications preinstalled as the default working environment.
 The tree includes Shelf, Rill, ktrem, and the supporting Kryon runtime
 work needed to boot them together inside TaijiOS. See [README](README)
 for the historical upstream README file.
+
+## Bundled Kryon Desktop
+
+TaijiOS is the integration target for the Kryon application stack:
+
+- Shelf provides the file manager and desktop file surfaces.
+- Rill provides the graphical shell and application launcher.
+- ktrem provides the terminal experience.
+- Kryon provides the shared UI/runtime layer used by the applications.
+
+The default QEMU profile boots into this desktop stack, while the text
+profile stays available for low-level OS work.
+
+## Boot Locally
 
 To boot TaijiOS, install qemu, so that you have `qemu-system-x86_64` in your path.
 Then:

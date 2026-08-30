@@ -24,9 +24,9 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: false
 
       - name: Build Site
         run: |
@@ -36,6 +36,7 @@ jobs:
           test -f build/site/favicon.ico
           test -f build/site/css/style.css
           test -f build/site/js/taijios-web.js
+          test -f build/site/assets/taijios-banner.png
           test -f build/site/assets/taijios-desktop.png
           test -f build/site/assets/taijios-web.raw
           test -f build/site/assets/v86/libv86.js
@@ -44,7 +45,7 @@ jobs:
           test -f build/site/assets/v86/vgabios.bin
 
       - name: Upload Site Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: taijios-site
           path: build/site
@@ -58,7 +59,7 @@ jobs:
 
     steps:
       - name: Download Site Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: taijios-site
           path: build/site
@@ -106,7 +107,7 @@ jobs:
 
     steps:
       - name: Download Site Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: taijios-site
           path: build/site
