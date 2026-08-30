@@ -1,13 +1,17 @@
 # TaijiOS
 
-TaijiOS is a bootable desktop OS tree based on the 9legacy branch of
-Plan 9 from Bell Labs. See [README](README) for the historical upstream
-README file.
+TaijiOS is Kryon Labs' flagship operating system: a bootable desktop OS
+tree based on the 9legacy branch of Plan 9 from Bell Labs, with Kryon
+applications preinstalled as the default working environment.
+
+The tree includes Shelf, Rill, ktrem, and the supporting Kryon runtime
+work needed to boot them together inside TaijiOS. See [README](README)
+for the historical upstream README file.
 
 To boot TaijiOS, install qemu, so that you have `qemu-system-x86_64` in your path.
 Then:
 
-	git clone https://github.com/rsc/plan9 taiji
+	git clone https://github.com/kryonlabs/taiji.git
 	./taiji/boot/qemu
 
 The qemu script builds u9fs in taiji/sys/src/cmd/unix/u9fs and then runs
