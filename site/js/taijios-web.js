@@ -2,7 +2,7 @@
   "use strict";
 
   const v86Base = "assets/v86";
-  const assetVersion = "20260830-fullpage";
+  const assetVersion = "20260831-selector";
   const versioned = (path) => `${path}?v=${assetVersion}`;
   const emulatorConfig = {
     wasm_path: versioned(`${v86Base}/v86.wasm`),
@@ -19,7 +19,6 @@
     autostart: true,
   };
 
-  const startButton = document.getElementById("start-emulator");
   const resetButton = document.getElementById("reset-emulator");
   const fullscreenButton = document.getElementById("fullscreen-emulator");
   const bootChoiceButtons = Array.from(document.querySelectorAll(".boot-choice"));
@@ -68,7 +67,6 @@
       return;
     }
     setStatus("Loading emulator", "ready");
-    startButton.disabled = true;
     resetButton.disabled = true;
     try {
       await loadV86();
@@ -77,11 +75,8 @@
       emulator = new V86Constructor(emulatorConfig);
       window.taijiosEmulator = emulator;
       wireEmulatorEvents(emulator);
-      startButton.textContent = "TaijiOS Running";
       setStatus("Booting", "running");
     } catch (error) {
-      startButton.disabled = false;
-      startButton.textContent = "Retry Launch";
       resetButton.disabled = true;
       setStatus("Could not start browser boot", "error");
       placeholder.classList.remove("is-hidden");
@@ -138,11 +133,11 @@
     if (autoBootQueued) {
       return;
     }
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("boot") === "manual") {
-      return;
-    }
-    const choice = params.get("boot") || "1";
+    // The boot menu defaults to the desktop on its own (menudefault in
+    // plan9.ini); sending keys here would leak a stray Enter into the
+    // guest and dismiss the namespace selector right after it appears.
+    // Only an explicit ?boot=N picks a menu item.
+    const choice = new URLSearchParams(window.location.search).get("boot") || "";
     if (!/^[1-9]$/.test(choice)) {
       return;
     }
@@ -168,7 +163,6 @@
     }
   }
 
-  startButton.addEventListener("click", startEmulator);
   resetButton.addEventListener("click", resetEmulator);
   bootChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => sendBootChoice(button.dataset.bootChoice));

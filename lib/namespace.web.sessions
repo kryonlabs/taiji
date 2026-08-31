@@ -1,0 +1,4 @@
+# id|display name|description|command
+# Web boot catalog: only sessions the browser image can run (no Debian rootfs).
+rill|Rill|Taiji desktop namespace|rill
+plan9|Plan 9|Original Rio namespace|rio9 -k 'rc -i'
