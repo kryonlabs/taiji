@@ -15,3 +15,7 @@
 	path = sys/src/cmd/rill
 	url = https://github.com/kryonlabs/rill.git
 	branch = master
+[submodule "sys/src/pass"]
+	path = sys/src/pass
+	url = https://github.com/waozixyz/pass.git
+	branch = master

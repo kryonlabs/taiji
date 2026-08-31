@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 import gzip
 import os
@@ -11,6 +12,10 @@ ROOT_PAYLOAD_FILES = (
     "386/bin/ktrem",
     "386/bin/shelf",
     "386/bin/explorer",
+    "386/bin/inbe",
+    "386/bin/pass",
+    "sys/src/inbe/assets/app/icon.png",
+    "sys/src/pass/assets/app/icon.png",
     "386/lib/ape/libap.a",
     "386/lib/ape/libbsd.a",
     "rc/bin/ape/linuxcc",
@@ -48,6 +53,7 @@ ROOT_PAYLOAD_FILES = (
 ROOT_PAYLOAD_DIRS = (
     "lib/q9",
     "lib/kryon",
+    "lib/rill",
     "usr/glenda/lib/kryon",
 )
 
@@ -149,21 +155,27 @@ def patch_root_payload(image: bytearray) -> bool:
 
     recompressed = gzip.compress(payload, compresslevel=9, mtime=0)
     new_size = len(recompressed)
-    if new_size > payload_limit - payload_start:
-        print(
-            f"patched root payload grew past Plan 9 partition capacity: {new_size} bytes",
-            file=sys.stderr,
-        )
-        return False
-    if len(str(new_size)) != len(str(old_size)):
-        print(
-            f"patched root payload size changed digit width from {old_size} to {new_size}",
-            file=sys.stderr,
-        )
-        return False
+    header = b"gzfilesystem " + str(new_size).encode("ascii") + b"\n"
+    needed = start + len(header) + new_size
+    if needed > payload_limit:
+        # The preinstalled apps outgrew the base image: extend the raw
+        # image (whole megabytes) and re-expand the partition to match.
+        grow = needed - payload_limit
+        grow += 1024 * 1024 - grow % (1024 * 1024)
+        image += b"\0" * grow
+        if not expand_partition(image):
+            return False
+        payload_limit = partition_end(image)
+        if needed > payload_limit:
+            print(
+                f"patched root payload of {new_size} bytes still does not fit the partition",
+                file=sys.stderr,
+            )
+            return False
 
-    image[start + len(marker) : line_end] = str(new_size).encode("ascii")
-    image[payload_start:payload_limit] = recompressed + b"\0" * (payload_limit - payload_start - len(recompressed))
+    image[start:payload_limit] = header + recompressed + b"\0" * (
+        payload_limit - start - len(header) - new_size
+    )
     return True
 
 
@@ -186,16 +198,22 @@ def expand_partition(image: bytearray) -> bool:
     image[entry + 5 : entry + 8] = b"\xfe\xff\xff"
     image[entry + 12 : entry + 16] = sectors.to_bytes(4, "little")
 
-    old = b"part gzroot 4096 14272\n"
-    new = f"part gzroot 4096 {sectors}\n".encode("ascii")
-    if len(old) != len(new):
-        print("expanded Plan 9 partition map does not fit in place", file=sys.stderr)
-        return False
-    pos = image.find(old, start_lba * 512, (start_lba + 4096) * 512)
-    if pos < 0:
+    # Rewrite the in-partition map line wholesale: the sector count can
+    # gain digits, so the replacement is allowed to change length as long
+    # as the map sector is rebuilt and NUL-padded to 512 bytes.
+    match = re.search(
+        rb"part gzroot 4096 \d+\n",
+        bytes(image[start_lba * 512 : (start_lba + 4096) * 512]),
+    )
+    if match is None:
         print("raw image Plan 9 gzroot partition map entry not found", file=sys.stderr)
         return False
-    image[pos : pos + len(old)] = new
+    map_pos = start_lba * 512 + match.start()
+    sector_base = map_pos - map_pos % 512
+    relative = map_pos - sector_base
+    sector = bytearray(image[sector_base : sector_base + 512])
+    sector[relative : relative + len(match.group(0))] = f"part gzroot 4096 {sectors}\n".encode("ascii")
+    image[sector_base : sector_base + 512] = sector
     return True
 
 

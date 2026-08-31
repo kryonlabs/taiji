@@ -20,6 +20,24 @@ X-Rill-Favorite=true
 
 [Desktop Entry]
 Type=Application
+Id=inbe
+Name=Inner Breeze
+Comment=Breathing, meditation and habits
+Categories=Health;Utility;
+Exec=inbe
+Icon=inbe
+
+[Desktop Entry]
+Type=Application
+Id=pass
+Name=Pass
+Comment=Password generator
+Categories=Utility;Security;
+Exec=pass
+Icon=pass
+
+[Desktop Entry]
+Type=Application
 Id=settings
 Name=Settings
 Comment=Desktop preferences

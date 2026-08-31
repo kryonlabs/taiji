@@ -39,6 +39,8 @@ must test ! -d /sys/src/kapsule
 must test -x /386/bin/ktrem
 must test -x /386/bin/rill
 must test -x /386/bin/shelf
+must test -x /386/bin/inbe
+must test -x /386/bin/pass
 
 if(~ $fail 0)
 	echo driver-smoke-ok

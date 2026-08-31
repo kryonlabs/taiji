@@ -9,6 +9,9 @@ usr/glenda/tmp
 usr/glenda/acme.dump
 usr/glenda/lib/go.rc
 usr/glenda/lib/kbmap
+usr/glenda/.local/
+usr/glenda/profiles.tsv
+usr/glenda/.kryon_*
 sys/log
 sys/src/cmd/unix/u9fs/u9fs
 boot/q9/build.log
