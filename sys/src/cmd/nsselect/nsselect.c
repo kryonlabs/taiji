@@ -1,15 +1,22 @@
 #include <u.h>
 #include <libc.h>
-#include <draw.h>
-#include <thread.h>
-#include <mouse.h>
-#include <keyboard.h>
+#include "kryon.h"
+
+/* Namespace selector for the TaijiOS boot.  Reads a session catalog
+ * (id|name|description|command per line), draws the choices with the
+ * Kryon runtime so the picker carries the system theme, and launches
+ * the chosen command through a pre-forked rc launcher that owns the
+ * namespace/session environment.  Choosing nothing (Esc) exits with a
+ * non-empty status so the boot profile can drop to a shell. */
 
 enum {
 	Maxsessions = 16,
 	Fieldlen = 128,
 	Cmdlen = 256,
-	Buflen = 8192
+	Buflen = 8192,
+	Cardw = 300,
+	Cardh = 118,
+	Cardgap = 22
 };
 
 typedef struct Session Session;
@@ -30,21 +37,6 @@ int nsessions;
 int selected;
 int launchfd = -1;
 int launchpid = -1;
-
-Image *back;
-Image *panel;
-Image *panelhi;
-Image *edge;
-Image *text;
-Image *muted;
-Image *accent;
-Mousectl *mousectl;
-Keyboardctl *keyboardctl;
-Alt alts[4];
-Mouse mouse;
-Rune key;
-int resize;
-int mainstacksize = 32*1024;
 
 char *catalog = "/lib/namespace.sessions";
 
@@ -118,92 +110,6 @@ loadsessions(char *path)
 		nsessions++;
 	}
 	return nsessions;
-}
-
-Rectangle
-cardrect(int i)
-{
-	int cols, rows, w, h, gap, totalw, totalh, x, y;
-	Rectangle r;
-
-	cols = nsessions > 1 ? 2 : 1;
-	rows = (nsessions + cols - 1) / cols;
-	w = 250;
-	h = 104;
-	gap = 18;
-	totalw = cols*w + (cols-1)*gap;
-	totalh = rows*h + (rows-1)*gap;
-	x = screen->r.min.x + (Dx(screen->r)-totalw)/2;
-	y = screen->r.min.y + (Dy(screen->r)-totalh)/2 + 24;
-	r.min = Pt(x + (i%cols)*(w+gap), y + (i/cols)*(h+gap));
-	r.max = addpt(r.min, Pt(w, h));
-	return r;
-}
-
-void
-drawcenter(char *s, int y, Image *color)
-{
-	int x;
-
-	x = screen->r.min.x + (Dx(screen->r)-stringwidth(font, s))/2;
-	string(screen, Pt(x, y), color, ZP, font, s);
-}
-
-void
-drawsession(int i)
-{
-	Rectangle r, stripe;
-	Point p;
-	Image *fill;
-
-	r = cardrect(i);
-	fill = i == selected ? panelhi : panel;
-	draw(screen, r, fill, nil, ZP);
-	border(screen, r, 1, edge, ZP);
-	stripe = r;
-	stripe.max.y = stripe.min.y + 5;
-	draw(screen, stripe, accent, nil, ZP);
-	p = addpt(r.min, Pt(16, 22));
-	string(screen, p, text, ZP, font, sessions[i].name);
-	p.y += 24;
-	string(screen, p, muted, ZP, font, sessions[i].desc);
-	p.y += 26;
-	string(screen, p, muted, ZP, font, sessions[i].id);
-}
-
-void
-redraw(void)
-{
-	int i;
-
-	draw(screen, screen->r, back, nil, ZP);
-	drawcenter("Select namespace", screen->r.min.y + 76, text);
-	drawcenter("Choose the session namespace to start", screen->r.min.y + 100,
-	    muted);
-	for(i = 0; i < nsessions; i++)
-		drawsession(i);
-	drawcenter("Enter starts  |  arrows move  |  Esc exits",
-	    screen->r.max.y - 46, muted);
-	flushimage(display, 1);
-}
-
-void
-resized(void)
-{
-	if(getwindow(display, Refnone) < 0)
-		sysfatal("can't reattach to window");
-	redraw();
-}
-
-int
-hit(Point p)
-{
-	int i;
-
-	for(i = 0; i < nsessions; i++)
-		if(ptinrect(p, cardrect(i)))
-			return i;
-	return -1;
 }
 
 void
@@ -311,30 +217,98 @@ waitsession(void)
 	}
 }
 
+Color
+opaque_color(Color color)
+{
+	color.a = 255;
+	return color;
+}
+
+int
+cardcols(void)
+{
+	return nsessions > 1 ? 2 : 1;
+}
+
+Rectangle
+cardrect(int i)
+{
+	int cols, rows, totalw, totalh;
+	Rectangle r;
+
+	cols = cardcols();
+	rows = (nsessions + cols - 1) / cols;
+	totalw = cols*Cardw + (cols-1)*Cardgap;
+	totalh = rows*Cardh + (rows-1)*Cardgap;
+	r.x = (GetScreenWidth() - totalw)/2 + (i%cols)*(Cardw+Cardgap);
+	r.y = (GetScreenHeight() - totalh)/2 + 24 + (i/cols)*(Cardh+Cardgap);
+	r.width = Cardw;
+	r.height = Cardh;
+	return r;
+}
+
+void
+drawcentered(char *s, int y, int size, Color color)
+{
+	int x;
+
+	x = GetScreenWidth()/2 - MeasureText(s, size)/2;
+	DrawText(s, x, y, size, color);
+}
+
+/* Returns the session index picked by a click this frame, or -1. */
+int
+drawsession(int i)
+{
+	Rectangle r, stripe;
+	Vector2 mouse;
+	Color fill;
+	int hover;
+
+	r = cardrect(i);
+	mouse = GetMousePosition();
+	hover = CheckCollisionPointRec(mouse, r);
+	if(i == selected)
+		fill = opaque_color(GetThemeButton());
+	else
+		fill = opaque_color(GetThemeSurface());
+	DrawRectangleRounded(r, 0.07f, 8, fill);
+	if(hover && i != selected){
+		DrawRectangleRounded(r, 0.07f, 8, Fade(GetThemeButtonHover(), 0.38f));
+	}
+	stripe = r;
+	stripe.x += 14;
+	stripe.y += 14;
+	stripe.width = 44;
+	stripe.height = 6;
+	DrawRectangleRec(stripe, i == selected ?
+	    opaque_color(GetThemeLink()) : Fade(GetThemeLink(), 0.55f));
+	DrawText(sessions[i].name, (int)r.x + 16, (int)r.y + 34, 21,
+	    opaque_color(GetThemeText()));
+	DrawText(sessions[i].desc, (int)r.x + 16, (int)r.y + 64, 14,
+	    Fade(GetThemeText(), 0.62f));
+	DrawText(sessions[i].id, (int)r.x + 16, (int)r.y + 86, 13,
+	    Fade(GetThemeText(), 0.45f));
+	if(hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+		return i;
+	return -1;
+}
+
 void
 startsession(Session *s)
 {
 	Launch l;
 
-	if(keyboardctl != nil){
-		closekeyboard(keyboardctl);
-		keyboardctl = nil;
-	}
-	if(mousectl != nil){
-		closemouse(mousectl);
-		mousectl = nil;
-	}
-	if(display != nil)
-		closedisplay(display);
 	memset(&l, 0, sizeof l);
 	copystr(l.id, sizeof l.id, s->id);
 	copystr(l.command, sizeof l.command, s->command);
+	CloseWindow();
 	if(launchfd < 0 || writefull(launchfd, &l, sizeof l) != sizeof l)
 		sysfatal("launch %s failed: %r", s->command);
 	close(launchfd);
 	launchfd = -1;
 	waitsession();
-	threadexitsall(nil);
+	exits(nil);
 }
 
 void
@@ -345,9 +319,9 @@ usage(void)
 }
 
 void
-threadmain(int argc, char **argv)
+main(int argc, char *argv[])
 {
-	int h;
+	int i, pick, blocktop;
 
 	ARGBEGIN{
 	case 'c':
@@ -362,71 +336,63 @@ threadmain(int argc, char **argv)
 	if(loadsessions(catalog) <= 0)
 		sysfatal("no namespace sessions in %s", catalog);
 	startlauncher();
-	if(initdraw(nil, nil, "namespace") < 0)
-		sysfatal("initdraw failed: %r");
-	mousectl = initmouse(nil, screen);
-	if(mousectl == nil)
-		sysfatal("initmouse failed: %r");
-	keyboardctl = initkeyboard(nil);
-	if(keyboardctl == nil)
-		sysfatal("initkeyboard failed: %r");
-	back = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x15202aff);
-	panel = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x243240ff);
-	panelhi = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x31516cff);
-	edge = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x8bb7d9ff);
-	text = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xf2f7fbff);
-	muted = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0xaebbc6ff);
-	accent = allocimage(display, Rect(0,0,1,1), screen->chan, 1, 0x70c0e8ff);
-	alts[0].c = mousectl->c;
-	alts[0].v = &mouse;
-	alts[0].op = CHANRCV;
-	alts[1].c = mousectl->resizec;
-	alts[1].v = &resize;
-	alts[1].op = CHANRCV;
-	alts[2].c = keyboardctl->c;
-	alts[2].v = &key;
-	alts[2].op = CHANRCV;
-	alts[3].op = CHANEND;
-	redraw();
-	for(;;){
-		switch(alt(alts)){
-		case 0:
-			if((mouse.buttons & 1) == 0)
-				break;
-			h = hit(mouse.xy);
-			if(h >= 0){
-				selected = h;
-				redraw();
-				startsession(&sessions[selected]);
-			}
-			break;
-		case 1:
-			resized();
-			break;
-		case 2:
-			switch(key){
-			case Kleft:
-			case Kup:
-				if(selected > 0)
-					selected--;
-				redraw();
-				break;
-			case Kright:
-			case Kdown:
-			case '\t':
-				if(selected < nsessions-1)
-					selected++;
-				redraw();
-				break;
-			case '\n':
-			case '\r':
-				startsession(&sessions[selected]);
-				break;
-			case Kesc:
-			case Keof:
-				threadexitsall("cancel");
-			}
-			break;
+
+	SetSingleInstance(0);
+	InitWindow(640, 480, "namespace");
+	if(!IsWindowReady())
+		sysfatal("kryon window failed: %r");
+	EnableEventWaiting();
+	SetTargetFPS(30);
+	SetUIDefaultFontAutoLoad(1);
+	RefreshSystemTheme();
+	SetThemeSource(THEME_SOURCE_SYSTEM);
+	SetThemeMode(THEME_MODE_SYSTEM);
+	SetThemeStyle(THEME_STYLE_SYSTEM);
+	SetCurrentTheme(GetDefaultThemeForThemeStyle(THEME_STYLE_SYSTEM),
+	    SystemThemePrefersDark());
+	ApplyCurrentUITheme();
+
+	while(!WindowShouldClose()){
+		if(IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_UP)){
+			if(selected > 0)
+				selected--;
 		}
+		if(IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_DOWN) ||
+		    IsKeyPressed(KEY_TAB)){
+			if(selected < nsessions-1)
+				selected++;
+		}
+		if(IsKeyPressed(KEY_ESCAPE)){
+			CloseWindow();
+			exits("cancel");
+		}
+		if(IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
+			startsession(&sessions[selected]);
+
+		pick = -1;
+		BeginDrawing();
+		ClearBackground(opaque_color(GetThemeBackground()));
+		BeginUIFrame(GetScreenWidth(), GetScreenHeight(), 1.0f);
+		BeginUI(0x6e73656c);
+		blocktop = GetScreenHeight()/2 - 24;
+		drawcentered("Select namespace", blocktop - 96, 30,
+		    opaque_color(GetThemeText()));
+		drawcentered("Choose the session namespace to start",
+		    blocktop - 56, 15, Fade(GetThemeText(), 0.62f));
+		for(i = 0; i < nsessions; i++){
+			if(drawsession(i) >= 0){
+				selected = i;
+				pick = i;
+			}
+		}
+		drawcentered("Enter starts  |  arrows move  |  Esc exits",
+		    GetScreenHeight() - 46, 14, Fade(GetThemeText(), 0.55f));
+		EndUI();
+		EndUIFrame();
+		EndDrawing();
+		if(pick >= 0)
+			startsession(&sessions[pick]);
 	}
+	CloseWindow();
+	exits("cancel");
 }
