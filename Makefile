@@ -39,3 +39,6 @@ linuxrun-smoke:
 
 pcvirt:
 	sh scripts/taiji-support.sh build-pcvirt
+
+kryon-smoke:
+	sh scripts/kryon-smoke.sh

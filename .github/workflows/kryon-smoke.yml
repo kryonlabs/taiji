@@ -1,0 +1,86 @@
+name: Kryon Smoke
+
+# Native Plan 9 build check for the Kryon library: boots the tree under
+# QEMU, rebuilds libkryon.a with 8c, compiles+links+runs the probe from
+# scripts/kryon-probe.c, and links Rill (which embeds ktrem and shelf).
+# This is what catches kryon master regressions that only appear on the
+# native compiler.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - sys/src/kryon
+      - sys/src/ktrem
+      - sys/src/shelf
+      - sys/src/cmd/rill
+      - scripts/kryon-smoke.sh
+      - scripts/kryon-probe.c
+      - .github/workflows/kryon-smoke.yml
+  schedule:
+    # Daily check of kryon master, regardless of the taiji pin.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      kryon_ref:
+        description: Kryon ref to test (defaults to the taiji submodule pin)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kryon-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Native Plan 9 Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Initialize Desktop Submodules
+        run: |
+          set -euo pipefail
+          git submodule update --init \
+            sys/src/kryon sys/src/ktrem sys/src/shelf sys/src/cmd/rill
+
+      - name: Select Kryon Ref
+        if: github.event_name == 'schedule' || inputs.kryon_ref != ''
+        run: |
+          set -euo pipefail
+          ref="${{ inputs.kryon_ref }}"
+          if [ -z "$ref" ] || [ "$ref" = "null" ]; then
+            ref="master"
+          fi
+          echo "Testing kryon ref: $ref"
+          git -C sys/src/kryon fetch origin "$ref"
+          git -C sys/src/kryon checkout --detach FETCH_HEAD
+          git -C sys/src/kryon log -1 --oneline
+
+      - name: Install QEMU
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+
+      - name: Run Kryon Smoke
+        run: |
+          set -euo pipefail
+          sh scripts/kryon-smoke.sh
+
+      - name: Upload Smoke Log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kryon-smoke-log
+          path: boot/q9/kryon-smoke.log
+          if-no-files-found: warn
