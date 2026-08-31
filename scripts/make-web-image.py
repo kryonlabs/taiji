@@ -271,11 +271,14 @@ def append_root_payload(blz: bytes) -> bytes:
 def make_mkfs_records() -> bytes:
     out = bytearray()
     for path in ROOT_PAYLOAD_DIRS:
+        if not Path(path).exists():
+            continue
         out += f"/{path} 20000000755 rsc staff 4294967295 0\n".encode("ascii")
     for path in ROOT_PAYLOAD_FILES:
         src = Path(path)
         if not src.exists():
-            raise ValueError(f"{src} does not exist")
+            print(f"skipping optional embedded root payload: {src} does not exist", file=sys.stderr)
+            continue
         data = src.read_bytes()
         mode = "775" if os.access(src, os.X_OK) else "664"
         out += f"/{path} {mode} rsc staff 4294967295 {len(data)}\n".encode("ascii")
