@@ -16,6 +16,9 @@ ROOT_PAYLOAD_FILES = (
     "386/bin/pass",
     "sys/src/inbe/assets/app/icon.png",
     "sys/src/pass/assets/app/icon.png",
+    "lib/rill/applications",
+    "lib/rill/icon.map",
+    "lib/rill/panel",
     "386/lib/ape/libap.a",
     "386/lib/ape/libbsd.a",
     "rc/bin/ape/linuxcc",
@@ -51,9 +54,22 @@ ROOT_PAYLOAD_FILES = (
 )
 
 ROOT_PAYLOAD_DIRS = (
+    "386/lib/ape",
     "lib/q9",
     "lib/kryon",
     "lib/rill",
+    "rc/bin/ape",
+    "sys/include/ape/sys",
+    "sys/src/ape/lib",
+    "sys/src/ape/lib/ap",
+    "sys/src/ape/lib/ap/plan9",
+    "sys/src/ape/lib/bsd",
+    "sys/src/inbe",
+    "sys/src/inbe/assets",
+    "sys/src/inbe/assets/app",
+    "sys/src/pass",
+    "sys/src/pass/assets",
+    "sys/src/pass/assets/app",
     "usr/glenda/lib/kryon",
 )
 
