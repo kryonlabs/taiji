@@ -1,6 +1,6 @@
 # TaijiOS
 
-[![Netlify](https://github.com/kryonlabs/taiji/actions/workflows/netlify.yml/badge.svg)](https://github.com/kryonlabs/taiji/actions/workflows/netlify.yml)
+[![Cloudflare Pages](https://github.com/kryonlabs/taiji/actions/workflows/pages.yml/badge.svg)](https://github.com/kryonlabs/taiji/actions/workflows/pages.yml)
 
 ![TaijiOS desktop banner](site/assets/taijios-banner.png)
 

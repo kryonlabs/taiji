@@ -1,0 +1,89 @@
+name: Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Site
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Build Site
+        run: |
+          set -euo pipefail
+          make site
+          test -f build/site/index.html
+          test -f build/site/favicon.ico
+          test -f build/site/css/style.css
+          test -f build/site/js/taijios-web.js
+          test -f build/site/assets/taijios-banner.png
+          test -f build/site/assets/taijios-desktop.png
+          test -f build/site/assets/taijios-web.raw
+          test -f build/site/assets/v86/libv86.js
+          test -f build/site/assets/v86/v86.wasm
+          test -f build/site/assets/v86/seabios.bin
+          test -f build/site/assets/v86/vgabios.bin
+
+      - name: Upload Site Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: taijios-site
+          path: build/site
+          if-no-files-found: error
+
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Download Site Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: taijios-site
+          path: build/site
+
+      - name: Deploy Preview To Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/site --project-name=taiji --branch=${{ github.head_ref || github.ref_name }}
+
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Download Site Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: taijios-site
+          path: build/site
+
+      - name: Deploy Production To Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy build/site --project-name=taiji --branch=master
