@@ -1,6 +1,6 @@
 </$objtype/mkfile
 
-TARG=q9themes
+TARG=explorer
 KRYON=/sys/src/kryon
 BIN=/$objtype/bin
 
@@ -9,7 +9,7 @@ CPPFLAGS=-I$KRYON/src/platform/plan9/include -I$KRYON/include \
 CFLAGS=-FTVw
 
 OFILES=\
-	q9themes.$O\
+	explorer.$O\
 
 LIB=/$objtype/lib/libkryon.a /$objtype/lib/libstdio.a
 
