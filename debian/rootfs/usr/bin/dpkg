@@ -1,0 +1,33 @@
+#!/taiji/bin/rc
+
+root=/
+
+if(~ $#* 0){
+	echo 'usage: dpkg [--root root] -i package.deb ...' >[1=2]
+	exit usage
+}
+
+if(~ $1 --root){
+	shift
+	if(~ $#* 0){
+		echo 'usage: dpkg [--root root] -i package.deb ...' >[1=2]
+		exit usage
+	}
+	root=$1
+	shift
+}
+
+switch($1){
+case -i --install
+	shift
+	if(~ $#* 0){
+		echo 'usage: dpkg [--root root] -i package.deb ...' >[1=2]
+		exit usage
+	}
+	for(pkg in $*)
+		/taiji/bin/deb/install -r $root $pkg || exit install
+	exit ''
+case *
+	echo 'dpkg: only -i/--install is implemented in this TaijiOS Debian namespace' >[1=2]
+	exit usage
+}

@@ -1,0 +1,4 @@
+This is root's home directory in the TaijiOS Debian namespace.
+
+The namespace root is backed by /debian/rootfs from the normal TaijiOS
+namespace.

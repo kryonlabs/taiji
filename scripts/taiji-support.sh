@@ -10,6 +10,7 @@ usage()
 	cat >&2 <<EOF
 usage: scripts/taiji-support.sh ape-smoke
        scripts/taiji-support.sh build-pcvirt
+       scripts/taiji-support.sh debian-smoke
        scripts/taiji-support.sh install-linuxrun
        scripts/taiji-support.sh linuxrun-smoke
        scripts/taiji-support.sh linux-support-suite
@@ -156,6 +157,89 @@ EOF
 )"
 }
 
+debian_smoke()
+{
+	taiji_guest_expect debian-smoke taiji-debian-session-ok "$(cat <<'EOF'
+echo taiji-debian-session-start
+pkg=/debian/rootfs/tmp/taiji-deb-smoke.deb
+tmp=/tmp/taiji-deb-smoke.$pid
+rm -rf $tmp $pkg /debian/rootfs/tmp/taiji-deb-root >/dev/null >[2=1]
+mkdir /debian/rootfs/tmp >/dev/null >[2=1]
+mkdir $tmp
+mkdir $tmp/control
+mkdir $tmp/data
+mkdir $tmp/data/usr
+mkdir $tmp/data/usr/bin
+echo '2.0' >$tmp/debian-binary
+{
+	echo 'Package: taiji-deb-smoke'
+	echo 'Version: 1.0'
+	echo 'Architecture: all'
+	echo 'Maintainer: TaijiOS'
+	echo 'Description: TaijiOS Debian namespace smoke package'
+} >$tmp/control/control
+{
+	echo '#!/taiji/bin/rc'
+	echo 'echo taiji-deb-payload-ok'
+} >$tmp/data/usr/bin/taiji-deb-smoke
+chmod +x $tmp/data/usr/bin/taiji-deb-smoke
+@{builtin cd $tmp/control && tar cf $tmp/control.tar control}
+@{builtin cd $tmp/data && tar cf $tmp/data.tar .}
+@{builtin cd $tmp && ar rc $pkg debian-binary control.tar data.tar}
+debian-session -c '
+if(! ~ `{pwd} /root){
+	echo taiji-debian-pwd-failed
+	exit failed
+}
+if(! ~ $user root){
+	echo taiji-debian-user-failed
+	exit failed
+}
+if(! ~ $home /root){
+	echo taiji-debian-home-failed
+	exit failed
+}
+if(! ~ $namespace debian){
+	echo taiji-debian-namespace-failed
+	exit failed
+}
+if(! ~ $session debian){
+	echo taiji-debian-session-env-failed
+	exit failed
+}
+if(! test -r /etc/os-release){
+	echo taiji-debian-os-release-failed
+	exit failed
+}
+if(! test -x /taiji/bin/rc){
+	echo taiji-debian-taiji-bin-failed
+	exit failed
+}
+if(! test -d /var/lib/dpkg){
+	echo taiji-debian-dpkg-dir-failed
+	exit failed
+}
+if(! dpkg --root /tmp/taiji-deb-root -i /tmp/taiji-deb-smoke.deb){
+	echo taiji-debian-dpkg-install-failed
+	exit failed
+}
+if(! test -x /tmp/taiji-deb-root/usr/bin/taiji-deb-smoke){
+	echo taiji-debian-payload-missing
+	exit failed
+}
+/tmp/taiji-deb-root/usr/bin/taiji-deb-smoke
+if(! grep -s taiji-deb-smoke /tmp/taiji-deb-root/var/lib/dpkg/status){
+	echo taiji-debian-status-missing
+	exit failed
+}
+rm -rf /tmp/taiji-deb-root /tmp/taiji-deb-smoke.deb >/dev/null >[2=1]
+echo taiji-debian-session-ok
+exit
+'
+EOF
+)"
+}
+
 linux_support_suite()
 {
 	taiji_guest_expect linux-support-suite taiji-linux-support-suite-ok "$(cat <<'EOF'
@@ -206,6 +290,9 @@ ape-smoke)
 	;;
 build-pcvirt)
 	build_pcvirt
+	;;
+debian-smoke)
+	debian_smoke
 	;;
 install-linuxrun)
 	install_linuxrun

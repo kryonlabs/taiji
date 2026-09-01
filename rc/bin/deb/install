@@ -1,0 +1,117 @@
+#!/taiji/bin/rc
+
+rfork en
+
+root=/
+
+fn usage {
+	echo 'usage: deb/install [-r root] package.deb' >[1=2]
+	exit usage
+}
+
+fn fail {
+	echo 'deb/install: '^$* >[1=2]
+	if(! ~ $#tmp 0)
+		rm -rf $tmp >/dev/null >[2=1]
+	exit deb
+}
+
+fn ensure {
+	if(! test -d $1){
+		if(! mkdir $1)
+			fail 'cannot create '^$1
+	}
+}
+
+while(! ~ $#* 0 && ~ $1 -*){
+	switch($1){
+	case -r
+		shift
+		if(~ $#* 0)
+			usage
+		root=$1
+		shift
+	case --
+		shift
+		break
+	case *
+		usage
+	}
+}
+
+if(! ~ $#* 1)
+	usage
+
+pkg=$1
+switch($pkg){
+case /*
+	;
+case *
+	wd=`{pwd}
+	pkg=$wd/$pkg
+}
+
+if(! test -r $pkg)
+	fail 'cannot read '^$pkg
+
+ensure $root
+ensure $root/var
+ensure $root/var/lib
+ensure $root/var/lib/dpkg
+ensure $root/tmp
+
+tmp=/tmp/debinstall.$pid
+if(! mkdir $tmp)
+	fail 'cannot create '^$tmp
+
+cwd=`{pwd}
+if(! builtin cd $tmp)
+	fail 'cannot enter '^$tmp
+if(! ar t $pkg >members)
+	fail 'not a readable ar archive: '^$pkg
+
+data=`{grep '^data\.tar' members | sed 1q}
+control=`{grep '^control\.tar' members | sed 1q}
+
+if(~ $#data 0)
+	fail 'missing data.tar member'
+
+if(! ar x $pkg $data)
+	fail 'cannot extract '^$data
+if(! ~ $#control 0){
+	if(! ar x $pkg $control >/dev/null >[2=1])
+		fail 'cannot extract '^$control
+}
+builtin cd $cwd
+
+switch($data){
+case data.tar data.tar.gz data.tgz data.tar.bz data.tbz data.tar.bz2 data.tbz2
+	@{builtin cd $root && tar xf $tmp/$data} || fail 'cannot extract '^$data
+case data.tar.xz data.tar.zst
+	fail $data^' is not supported yet; add xz/zstd support first'
+case *
+	fail 'unsupported data member '^$data
+}
+
+if(! ~ $#control 0){
+	ensure $tmp/control
+	switch($control){
+	case control.tar control.tar.gz control.tgz control.tar.bz control.tbz control.tar.bz2 control.tbz2
+		@{builtin cd $tmp/control && tar xf $tmp/$control} || fail 'cannot extract '^$control
+	case control.tar.xz control.tar.zst
+		fail $control^' is not supported yet; add xz/zstd support first'
+	case *
+		fail 'unsupported control member '^$control
+	}
+	if(test -r $tmp/control/control){
+		status=$root/var/lib/dpkg/status
+		{
+			echo 'Status: install ok installed'
+			grep -v '^Status:' $tmp/control/control
+			echo
+		} >>$status || fail 'cannot update '^$status
+	}
+}
+
+rm -rf $tmp
+exit ''

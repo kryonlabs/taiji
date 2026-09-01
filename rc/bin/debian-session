@@ -1,0 +1,107 @@
+#!/bin/rc
+
+rfork en
+
+root=/debian/rootfs
+
+fn fail {
+	echo 'debian-session: '^$* >[1=2]
+	exit debian
+}
+
+fn ensure {
+	if(! test -d $1){
+		if(! mkdir $1)
+			fail 'cannot create '^$1
+	}
+}
+
+ensure /debian
+ensure $root
+ensure $root/bin
+ensure $root/boot
+ensure $root/dev
+ensure $root/env
+ensure $root/etc
+ensure $root/fd
+ensure $root/home
+ensure $root/lib
+ensure $root/mnt
+ensure $root/net
+ensure $root/proc
+ensure $root/rc
+ensure $root/root
+ensure $root/srv
+ensure $root/tmp
+ensure $root/usr
+ensure $root/usr/bin
+ensure $root/usr/lib
+ensure $root/usr/local
+ensure $root/usr/local/bin
+ensure $root/var
+ensure $root/var/cache
+ensure $root/var/cache/apt
+ensure $root/var/lib
+ensure $root/var/lib/dpkg
+ensure $root/taiji
+ensure $root/taiji/bin
+ensure $root/taiji/ape
+ensure $root/taiji/ape/bin
+
+if(! bind /$cputype/bin $root/taiji/bin)
+	fail 'cannot bind TaijiOS binaries'
+if(! bind -a /rc/bin $root/taiji/bin)
+	fail 'cannot bind TaijiOS rc scripts'
+if(! bind /rc $root/rc)
+	fail 'cannot bind TaijiOS rc library'
+# Rill and the Kryon apps read /lib/rill, /lib/kryon and the fonts by
+# absolute path; union them behind the namespace's own /lib so Debian
+# payloads still write into the rootfs.
+if(! bind -a /lib $root/lib)
+	fail 'cannot bind TaijiOS libraries'
+if(test -d /$cputype/bin/ape)
+	bind -a /$cputype/bin/ape $root/taiji/ape/bin >/dev/null >[2=1]
+
+bind -a '#c' $root/dev >/dev/null >[2=1]
+bind '#d' $root/fd >/dev/null >[2=1]
+bind -c '#e' $root/env >/dev/null >[2=1]
+bind '#p' $root/proc >/dev/null >[2=1]
+bind -c '#s' $root/srv >/dev/null >[2=1]
+bind -a '#S' $root/dev >/dev/null >[2=1]
+bind -b '#k' $root/dev >/dev/null >[2=1]
+bind -a '#i' $root/dev >/dev/null >[2=1]
+bind -a '#m' $root/dev >/dev/null >[2=1]
+bind -a '#u' $root/dev >/dev/null >[2=1]
+bind -b '#P' $root/dev >/dev/null >[2=1]
+bind -a '#l' $root/net >/dev/null >[2=1]
+bind -a '#I' $root/net >/dev/null >[2=1]
+
+if(! bind $root /)
+	fail 'cannot enter '^$root
+
+user=root
+home=/root
+namespace=debian
+session=debian
+sysname=debian
+prompt=('root@debian# ' '	')
+path=(/bin /usr/bin /usr/local/bin /taiji/bin /taiji/ape/bin)
+
+cd /root
+
+if(~ $#* 0){
+	echo 'TaijiOS Debian namespace'
+	echo 'rootfs: /'
+	exec /taiji/bin/rc -i
+}
+
+if(~ $1 -c){
+	shift
+	if(~ $#* 0)
+		fail '-c needs a command'
+	exec /taiji/bin/rc -c $*
+}
+
+# With arguments, run them in the namespace (the session selector passes
+# the window manager here, e.g. debian-session rill).
+exec $*

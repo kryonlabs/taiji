@@ -1,0 +1,6 @@
+PRETTY_NAME="TaijiOS Debian Namespace"
+NAME="TaijiOS Debian Namespace"
+ID=debian
+ID_LIKE=debian
+VERSION_ID="taiji"
+HOME_URL="https://taijios.org/"
