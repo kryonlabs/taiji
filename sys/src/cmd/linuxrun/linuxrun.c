@@ -1,429 +1,640 @@
 #include <u.h>
 #include <libc.h>
+#include </386/include/ureg.h>
+typedef struct Ureg Ureg;
+
+/*
+ * linuxrun - execute static Linux i386 binaries on the Plan 9 kernel.
+ *
+ * The ELF is mapped with segattach("memory") at its program-header
+ * addresses (the 386 kernel has no NX, so the pages execute), Linux
+ * syscall sites (int $0x80) are rewritten to ud2, and the program is
+ * entered by bouncing off a ud2 trap whose note handler installs the
+ * initial registers.  Every later ud2 fault is a syscall: the handler
+ * emulates it from the Ureg registers and resumes.  Raw-syscall static
+ * binaries (no libc, no TLS) are the target; dynamic ELF programs need
+ * the interpreter, TLS and futex work that is not built yet.
+ */
 
 enum {
 	Elfident = 16,
 	EiClass = 4,
 	EiData = 5,
 	Elfclass32 = 1,
-	Elfclass64 = 2,
 	Elfdata2lsb = 1,
-	Elfdata2msb = 2,
-
-	Elf32ehsize = 52,
-	Elf64ehsize = 64,
-	Elf32phsize = 32,
-	Elf64phsize = 56,
-	Maxphsize = 128,
-
-	EtExec = 2,
-	EtDyn = 3,
-
 	Em386 = 3,
-	EmX8664 = 62,
-
+	EtExec = 2,
 	PtLoad = 1,
-	PtDynamic = 2,
 	PtInterp = 3,
-	PtPhdr = 6,
-	PtTls = 7,
-	PtGnuStack = 0x6474e551,
 
-	PfX = 1,
-	PfW = 2,
-	PfR = 4,
+	Maxph = 64,
+	Rungap = 64*1024,	/* merge PT_LOADs closer than this */
+
+	Pgsz = 4096,
+
+	/* fixed arenas: brk is carved from the low end of the map
+	 * segment to stay inside the kernel's small per-process
+	 * segment-slot budget */
+	Brkbase = 0x40000000,
+	Brksize = 8*1024*1024,
+	Mapbase = 0x40000000,
+	Mapsize = 64*1024*1024,
+	Stackbase = 0x60000000,
+	Stacksize = 128*1024,
+
+	/* Linux errnos, returned negative */
+	Enoent = 2,
+	Ebadf = 9,
+	Enomem = 12,
+	Eacces = 13,
+	Efault = 14,
+	Einval = 22,
+	Enotty = 25,
+	Enosys = 38,
+
+	/* Linux open flags */
+	LoCreat = 0x40,
+	LoExcl = 0x80,
+	LoTrunc = 0x200,
+	LoAppend = 0x400,
+
+	TrapUD = 6,		/* x86 #UD */
 };
 
-typedef struct Elf Elf;
+typedef struct Ehdr Ehdr;
 typedef struct Phdr Phdr;
-
-struct Elf {
-	int	class;
-	int	lsb;
-	ushort	type;
-	ushort	mach;
-	uvlong	entry;
-	uvlong	phoff;
-	ushort	phentsize;
-	ushort	phnum;
+struct Ehdr {
+	uchar ident[Elfident];
+	ushort type;
+	ushort machine;
+	ulong entry;
+	ulong phoff;
+	ushort phentsize;
+	ushort phnum;
 };
-
 struct Phdr {
-	ulong	type;
-	ulong	flags;
-	uvlong	offset;
-	uvlong	vaddr;
-	uvlong	paddr;
-	uvlong	filesz;
-	uvlong	memsz;
-	uvlong	align;
+	ulong type;
+	ulong offset;
+	ulong vaddr;
+	ulong filesz;
+	ulong memsz;
+	ulong flags;
+	ulong align;
 };
 
-static int analyzeonly;
+struct Liovec {		/* Linux struct iovec */
+	void *base;
+	ulong len;
+};
+
+int verbose;
+int analyzeonly;
+int started;
+ulong entrypc;
+ulong stacktop;
+Phdr ph[Maxph];
+int nph;
+ulong brkcur;
+char exitstr[16];
+
+static void
+fatal(char *fmt, ...)
+{
+	char buf[256];
+	va_list arg;
+
+	va_start(arg, fmt);
+	vseprint(buf, buf+sizeof buf, fmt, arg);
+	va_end(arg);
+	fprint(2, "linuxrun: %s\n", buf);
+	exits("linuxrun");
+}
 
 static ushort
-get16(uchar *p, int lsb)
+le16(uchar *p)
 {
-	if(lsb)
-		return p[0] | p[1]<<8;
-	return p[0]<<8 | p[1];
+	return p[0] | p[1]<<8;
 }
 
 static ulong
-get32(uchar *p, int lsb)
+le32(uchar *p)
 {
-	if(lsb)
-		return (ulong)p[0] | (ulong)p[1]<<8 | (ulong)p[2]<<16 | (ulong)p[3]<<24;
-	return (ulong)p[0]<<24 | (ulong)p[1]<<16 | (ulong)p[2]<<8 | (ulong)p[3];
+	return p[0] | (ulong)p[1]<<8 | (ulong)p[2]<<16 | (ulong)p[3]<<24;
 }
 
-static uvlong
-get64(uchar *p, int lsb)
+static void
+dumpsegments(void)
 {
-	uvlong v;
+	char path[64], buf[4096];
+	int fd, n;
+
+	snprint(path, sizeof path, "/proc/%d/segment", getpid());
+	fd = open(path, OREAD);
+	if(fd < 0)
+		return;
+	n = readn(fd, buf, sizeof buf-1);
+	close(fd);
+	if(n <= 0)
+		return;
+	buf[n] = 0;
+	fprint(2, "linuxrun: segments:\n%s", buf);
+}
+
+static void *
+segat(ulong va, ulong len)
+{
+	void *p;
+
+	p = segattach(0, "memory", (void*)va, len);
+	if(p == (void*)-1){
+		fprint(2, "linuxrun: segattach %#lux %#lux: %r\n", va, len);
+		dumpsegments();
+		fatal("cannot attach guest memory");
+	}
+	return p;
+}
+
+static int
+readat(int fd, void *buf, long n, vlong off)
+{
+	if(seek(fd, off, 0) < 0)
+		return -1;
+	return readn(fd, buf, n);
+}
+
+/*
+ * Map the PT_LOAD segments at their addresses, rewriting int $0x80
+ * (cd 80) into ud2 (0f 0b) in the executable bytes.  Fresh segment
+ * pages are zero, so bss needs no extra work.  A byte pair inside
+ * some other instruction would be rewritten too; that only matters
+ * for binaries that never execute an int 80, which is not a thing we
+ * care to run.
+ */
+static void
+loadelf(int fd, Ehdr *eh)
+{
+	uchar buf[Maxph*sizeof(Phdr)];
+	uchar *seg;
+	ulong va, lo, hi, off;
+	int i, j, k, patched;
+
+	USED(va);
+
+	if(readat(fd, buf, eh->phnum*eh->phentsize, eh->phoff) < 0)
+		fatal("read program headers: %r");
+	nph = 0;
+	for(i = 0; i < eh->phnum; i++){
+		ph[nph].type = le32(buf+i*eh->phentsize+0);
+		ph[nph].offset = le32(buf+i*eh->phentsize+4);
+		ph[nph].vaddr = le32(buf+i*eh->phentsize+8);
+		ph[nph].filesz = le32(buf+i*eh->phentsize+16);
+		ph[nph].memsz = le32(buf+i*eh->phentsize+20);
+		ph[nph].flags = le32(buf+i*eh->phentsize+24);
+		ph[nph].align = le32(buf+i*eh->phentsize+28);
+		if(ph[nph].type == PtInterp)
+			fatal("dynamic ELF: interpreter support is not built yet");
+		nph++;
+	}
+
+	patched = 0;
+	i = 0;
+	while(i < nph){
+		/* collect a run of PT_LOADs that fit in one segment
+		 * (the kernel allows only a handful of attachable
+		 * segments per process) */
+		if(ph[i].type != PtLoad || ph[i].memsz == 0){
+			i++;
+			continue;
+		}
+		lo = ph[i].vaddr & ~(Pgsz-1);
+		hi = ph[i].vaddr + ph[i].memsz;
+		for(j = i+1; j < nph; j++){
+			if(ph[j].type != PtLoad || ph[j].memsz == 0)
+				break;
+			if((ph[j].vaddr & ~(Pgsz-1)) - hi > Rungap)
+				break;
+			hi = ph[j].vaddr + ph[j].memsz;
+		}
+		seg = segat(lo, ((hi - lo + Pgsz-1) / Pgsz) * Pgsz);
+		while(i < j){
+			off = ph[i].vaddr - lo;
+			if(readat(fd, seg+off, ph[i].filesz, ph[i].offset) < 0)
+				fatal("read segment at %#lux: %r", ph[i].offset);
+			if(ph[i].flags & 1){	/* PF_X */
+				for(k = 0; k+1 < (int)ph[i].filesz; k++){
+					uchar *q = seg + off + k;
+
+					if(q[0] == 0xcd && q[1] == 0x80){
+						q[0] = 0x0f;
+						q[1] = 0x0b;
+						patched++;
+					}
+				}
+			}
+			if(verbose)
+				fprint(2, "linuxrun: load vaddr %#lux filesz %#lux memsz %#lux%s\n",
+					ph[i].vaddr, ph[i].filesz, ph[i].memsz,
+					(ph[i].flags & 1) ? " x" : "");
+			i++;
+		}
+	}
+	if(patched == 0)
+		fprint(2, "linuxrun: warning: no int 80 sites patched\n");
+	else if(verbose)
+		fprint(2, "linuxrun: patched %d syscall sites\n", patched);
+}
+
+/*
+ * Build the Linux initial stack: the argv0 string near the top, then
+ * argc/argv/envp/auxv below it, stack pointer 16-byte aligned.
+ */
+static ulong
+buildstack(char *argv0)
+{
+	uchar *st;
+	ulong sp, strp;
+	ulong *vec;
+	int naux, nvec;
+
+	st = segat(Stackbase, Stacksize);
+	strp = Stackbase + Stacksize - 64;
+	strcpy((char*)st + (strp - Stackbase), argv0);
+
+	naux = 4;	/* PAGESZ, ENTRY, UID, GID pairs */
+	nvec = 1 + 1 + 1 + 1 + 2*naux + 1;
+	sp = (strp - 16) & ~15UL;
+	sp = (sp - nvec*4) & ~15UL;
+	vec = (ulong*)(st + (sp - Stackbase));
+	vec[0] = 1;			/* argc */
+	vec[1] = strp;			/* argv[0] */
+	vec[2] = 0;			/* argv end */
+	vec[3] = 0;			/* envp end */
+	vec[4] = 6; vec[5] = Pgsz;	/* AT_PAGESZ */
+	vec[6] = 9; vec[7] = entrypc;	/* AT_ENTRY */
+	vec[8] = 11; vec[9] = 0;	/* AT_UID */
+	vec[10] = 13; vec[11] = 0;	/* AT_GID */
+	vec[12] = 0; vec[13] = 0;	/* AT_NULL */
+	return sp;
+}
+
+/* Linux struct utsname: six 65-byte fields */
+static long
+sysuname(ulong addr)
+{
+	char *p;
+	static char *fields[6] = {
+		"Linux", "taiji", "5.15.0-taiji", "#1 SMP Tue Sep 1 12:00:00 UTC 2026",
+		"i686", "(none)"
+	};
 	int i;
 
-	v = 0;
-	if(lsb)
-		for(i = 7; i >= 0; i--)
-			v = (v<<8) | p[i];
-	else
-		for(i = 0; i < 8; i++)
-			v = (v<<8) | p[i];
-	return v;
+	if(addr == 0)
+		return -Efault;
+	p = (char*)addr;
+	memset(p, 0, 6*65);
+	for(i = 0; i < 6; i++)
+		strncpy(p+i*65, fields[i], 64);
+	return 0;
 }
 
-static void
-put16le(uchar *p, ushort v)
+static long
+syswritev(ulong fd, ulong iov, ulong cnt)
 {
-	p[0] = v;
-	p[1] = v>>8;
+	struct Liovec *v;
+	long total, n;
+	ulong i;
+
+	v = (struct Liovec*)iov;
+	total = 0;
+	for(i = 0; i < cnt; i++)
+		total += v[i].len;
+	for(i = 0; i < cnt; i++){
+		if(v[i].len == 0)
+			continue;
+		n = write((int)fd, v[i].base, v[i].len);
+		if(n < 0)
+			return -Ebadf;
+	}
+	return total;
 }
 
-static void
-put32le(uchar *p, ulong v)
+static long
+sysreadv(ulong fd, ulong iov, ulong cnt)
 {
-	p[0] = v;
-	p[1] = v>>8;
-	p[2] = v>>16;
-	p[3] = v>>24;
+	struct Liovec *v;
+	long total, n;
+	ulong i;
+
+	v = (struct Liovec*)iov;
+	total = 0;
+	for(i = 0; i < cnt; i++){
+		if(v[i].len == 0)
+			continue;
+		n = read((int)fd, v[i].base, v[i].len);
+		if(n < 0)
+			return -Ebadf;
+		total += n;
+		if(n < (long)v[i].len)
+			break;
+	}
+	return total;
 }
 
-static char*
-machine(ushort m)
+static long
+sysopen(ulong path, ulong flags, ulong mode)
 {
-	switch(m){
-	case Em386:
-		return "386";
-	case EmX8664:
-		return "amd64";
+	int pmode, fd;
+	char *p;
+
+	USED(mode);
+	if(path == 0)
+		return -Efault;
+	p = (char*)path;
+	switch(flags & 3){
 	default:
-		return "unknown";
+		return -Einval;
+	case 0: pmode = OREAD; break;
+	case 1: pmode = OWRITE; break;
+	case 2: pmode = ORDWR; break;
 	}
-}
-
-static char*
-etype(ushort t)
-{
-	switch(t){
-	case EtExec:
-		return "exec";
-	case EtDyn:
-		return "dyn";
-	default:
-		return "other";
-	}
-}
-
-static void
-flagstr(ulong flags, char *buf)
-{
-	buf[0] = (flags&PfR) ? 'r' : '-';
-	buf[1] = (flags&PfW) ? 'w' : '-';
-	buf[2] = (flags&PfX) ? 'x' : '-';
-	buf[3] = 0;
-}
-
-static int
-readelf(int fd, char *path, Elf *e)
-{
-	uchar hdr[Elf64ehsize];
-	int n, hsize;
-
-	n = pread(fd, hdr, sizeof hdr, 0);
-	if(n < Elfident || memcmp(hdr, "\177ELF", 4) != 0){
-		fprint(2, "linuxrun: %s is not an ELF file\n", path);
-		return -1;
-	}
-	e->class = hdr[EiClass];
-	if(e->class != Elfclass32 && e->class != Elfclass64){
-		fprint(2, "linuxrun: %s has unsupported ELF class %d\n", path, e->class);
-		return -1;
-	}
-	e->lsb = hdr[EiData] == Elfdata2lsb;
-	if(hdr[EiData] != Elfdata2lsb && hdr[EiData] != Elfdata2msb){
-		fprint(2, "linuxrun: %s has unsupported ELF byte order %d\n", path, hdr[EiData]);
-		return -1;
-	}
-	hsize = e->class == Elfclass64 ? Elf64ehsize : Elf32ehsize;
-	if(n < hsize){
-		fprint(2, "linuxrun: %s has a short ELF header\n", path);
-		return -1;
-	}
-	e->type = get16(hdr+16, e->lsb);
-	e->mach = get16(hdr+18, e->lsb);
-	if(e->class == Elfclass64){
-		e->entry = get64(hdr+24, e->lsb);
-		e->phoff = get64(hdr+32, e->lsb);
-		e->phentsize = get16(hdr+54, e->lsb);
-		e->phnum = get16(hdr+56, e->lsb);
-	}else{
-		e->entry = get32(hdr+24, e->lsb);
-		e->phoff = get32(hdr+28, e->lsb);
-		e->phentsize = get16(hdr+42, e->lsb);
-		e->phnum = get16(hdr+44, e->lsb);
-	}
-	return 0;
-}
-
-static int
-readphdr(int fd, char *path, Elf *e, int idx, Phdr *p)
-{
-	uchar buf[Maxphsize];
-	int minsize, n;
-	vlong off;
-
-	minsize = e->class == Elfclass64 ? Elf64phsize : Elf32phsize;
-	if(e->phentsize < minsize || e->phentsize > sizeof buf){
-		fprint(2, "linuxrun: %s has unsupported program-header entry size %ud\n", path, e->phentsize);
-		return -1;
-	}
-	off = e->phoff + (uvlong)idx*e->phentsize;
-	n = pread(fd, buf, e->phentsize, off);
-	if(n != e->phentsize){
-		fprint(2, "linuxrun: %s has a short program-header table\n", path);
-		return -1;
-	}
-	memset(p, 0, sizeof *p);
-	if(e->class == Elfclass64){
-		p->type = get32(buf+0, e->lsb);
-		p->flags = get32(buf+4, e->lsb);
-		p->offset = get64(buf+8, e->lsb);
-		p->vaddr = get64(buf+16, e->lsb);
-		p->paddr = get64(buf+24, e->lsb);
-		p->filesz = get64(buf+32, e->lsb);
-		p->memsz = get64(buf+40, e->lsb);
-		p->align = get64(buf+48, e->lsb);
-	}else{
-		p->type = get32(buf+0, e->lsb);
-		p->offset = get32(buf+4, e->lsb);
-		p->vaddr = get32(buf+8, e->lsb);
-		p->paddr = get32(buf+12, e->lsb);
-		p->filesz = get32(buf+16, e->lsb);
-		p->memsz = get32(buf+20, e->lsb);
-		p->flags = get32(buf+24, e->lsb);
-		p->align = get32(buf+28, e->lsb);
-	}
-	return 0;
-}
-
-static void
-readinterp(int fd, Phdr *p, char *buf, int nbuf)
-{
-	int n;
-
-	if(nbuf <= 0)
-		return;
-	buf[0] = 0;
-	if(p->filesz == 0)
-		return;
-	if(p->filesz >= nbuf)
-		n = nbuf - 1;
-	else
-		n = p->filesz;
-	if(pread(fd, buf, n, p->offset) != n){
-		strcpy(buf, "<unreadable>");
-		return;
-	}
-	buf[n] = 0;
-}
-
-static int
-inspect(char *path, int quietok)
-{
-	Elf e;
-	Phdr p;
-	char flags[4], interp[256];
-	int fd, i, loads, dynamic, hasinterp, hastls, hasstack;
-
-	fd = open(path, OREAD);
-	if(fd < 0){
-		fprint(2, "linuxrun: open %s: %r\n", path);
-		return -1;
-	}
-	if(readelf(fd, path, &e) < 0){
-		close(fd);
-		return -1;
-	}
-	print("linuxrun: %s: ELF%d %s %s %s entry %#llux\n",
-		path,
-		e.class == Elfclass64 ? 64 : 32,
-		e.lsb ? "little-endian" : "big-endian",
-		machine(e.mach),
-		etype(e.type),
-		e.entry);
-	print("linuxrun: phdr: offset %#llux entsize %ud count %ud\n",
-		e.phoff, e.phentsize, e.phnum);
-
-	loads = 0;
-	dynamic = e.type == EtDyn;
-	hasinterp = 0;
-	hastls = 0;
-	hasstack = 0;
-	interp[0] = 0;
-	for(i = 0; i < e.phnum; i++){
-		if(readphdr(fd, path, &e, i, &p) < 0){
-			close(fd);
-			return -1;
+	if(flags & LoTrunc)
+		pmode |= OTRUNC;
+	if(flags & LoCreat){
+		if(access(p, AEXIST) < 0){
+			fd = create(p, pmode, 0666);
+			if(fd < 0)
+				return -Enoent;
+			return fd;
 		}
-		switch(p.type){
-		case PtLoad:
-			flagstr(p.flags, flags);
-			print("linuxrun: load[%d]: off %#llux vaddr %#llux filesz %#llux memsz %#llux flags %s align %#llux\n",
-				loads, p.offset, p.vaddr, p.filesz, p.memsz, flags, p.align);
-			loads++;
-			break;
-		case PtInterp:
-			hasinterp = 1;
-			readinterp(fd, &p, interp, sizeof interp);
-			print("linuxrun: interp: %s\n", interp);
-			break;
-		case PtDynamic:
-			dynamic = 1;
-			print("linuxrun: dynamic segment present\n");
-			break;
-		case PtTls:
-			hastls = 1;
-			print("linuxrun: tls segment present\n");
-			break;
-		case PtGnuStack:
-			hasstack = 1;
-			flagstr(p.flags, flags);
-			print("linuxrun: gnu-stack: flags %s\n", flags);
-			break;
-		}
+		if(flags & LoExcl)
+			return -Enoent;
 	}
-	close(fd);
-	if(loads == 0){
-		fprint(2, "linuxrun: %s has no loadable segments\n", path);
-		return -1;
-	}
-	if(e.mach != Em386)
-		print("linuxrun: unsupported-machine: %s needs an architecture backend\n", machine(e.mach));
-	if(dynamic || hasinterp)
-		print("linuxrun: unsupported-dynamic: interpreter/dynamic linking is not wired yet\n");
-	if(hastls)
-		print("linuxrun: unsupported-tls: Linux TLS setup is not wired yet\n");
-	if(!dynamic && !hasinterp && e.mach == Em386)
-		print("linuxrun: candidate: static 386 Linux ELF with %d load segment%s\n",
-			loads, loads == 1 ? "" : "s");
-	if(!hasstack)
-		print("linuxrun: note: no GNU-stack program header\n");
-	if(!quietok)
-		fprint(2, "linuxrun: Linux syscall/stack execution is not implemented yet; analysis only\n");
-	return 0;
+	fd = open(p, pmode);
+	if(fd < 0)
+		return -Enoent;
+	return fd;
 }
 
-static int
-writesmoke(char *path)
+static ulong mapbump = Mapbase + Brksize;
+
+static long
+sysmmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong off)
 {
-	uchar b[Elf32ehsize+Elf32phsize];
-	int fd;
+	ulong va;
 
-	memset(b, 0, sizeof b);
-	b[0] = 0x7f;
-	b[1] = 'E';
-	b[2] = 'L';
-	b[3] = 'F';
-	b[EiClass] = Elfclass32;
-	b[EiData] = Elfdata2lsb;
-	b[6] = 1;
-	put16le(b+16, EtExec);
-	put16le(b+18, Em386);
-	put32le(b+20, 1);
-	put32le(b+24, 0x08048054);
-	put32le(b+28, Elf32ehsize);
-	put16le(b+40, Elf32ehsize);
-	put16le(b+42, Elf32phsize);
-	put16le(b+44, 1);
-
-	put32le(b+Elf32ehsize+0, PtLoad);
-	put32le(b+Elf32ehsize+4, 0);
-	put32le(b+Elf32ehsize+8, 0x08048000);
-	put32le(b+Elf32ehsize+12, 0x08048000);
-	put32le(b+Elf32ehsize+16, sizeof b);
-	put32le(b+Elf32ehsize+20, sizeof b);
-	put32le(b+Elf32ehsize+24, PfR|PfX);
-	put32le(b+Elf32ehsize+28, 0x1000);
-
-	fd = create(path, OWRITE, 0666);
-	if(fd < 0){
-		fprint(2, "linuxrun: create %s: %r\n", path);
-		return -1;
+	USED(addr);
+	USED(prot);
+	if(len == 0)
+		return -Einval;
+	len = ((len + Pgsz-1) / Pgsz) * Pgsz;
+	if(mapbump + len > Mapbase + Mapsize)
+		return -Enomem;
+	va = mapbump;
+	mapbump += len;
+	if(!(flags & 0x20)){	/* not MAP_ANONYMOUS: fill from the file */
+		if(readat((int)fd, (void*)va, len, off) < 0)
+			return -Ebadf;
 	}
-	if(write(fd, b, sizeof b) != sizeof b){
-		fprint(2, "linuxrun: write %s: %r\n", path);
-		close(fd);
-		remove(path);
-		return -1;
-	}
-	close(fd);
-	return 0;
+	return va;
 }
+
+static long
+dosyscall(Ureg *ur)
+{
+	ulong nr, a1, a2, a3;
+	long r;
+
+	nr = ur->ax;
+	a1 = ur->bx;
+	a2 = ur->cx;
+	a3 = ur->dx;
+	r = -Enosys;
+	switch(nr){
+	case 1:		/* exit */
+	case 252:	/* exit_group */
+		snprint(exitstr, sizeof exitstr, "%lux", a1 & 0xff);
+		exits(exitstr);
+		return 0;
+	case 3:		/* read */
+		r = read((int)a1, (void*)a2, a3);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 4:		/* write */
+		r = write((int)a1, (void*)a2, a3);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 5:		/* open */
+		r = sysopen(a1, a2, ur->si);
+		break;
+	case 6:		/* close */
+		close((int)a1);
+		r = 0;
+		break;
+	case 8:		/* creat */
+		r = sysopen(a1, LoCreat|LoTrunc|1, 0666);
+		break;
+	case 10:	/* unlink */
+		r = remove((char*)a1) < 0 ? -Enoent : 0;
+		break;
+	case 13:	/* time */
+		r = time(nil);
+		if(a1 != 0)
+			*(ulong*)a1 = r;
+		break;
+	case 19:	/* lseek */
+		r = seek((int)a1, a2, a3);
+		break;
+	case 20:	/* getpid */
+	case 224:	/* gettid */
+		r = getpid();
+		break;
+	case 24:	/* getuid */
+	case 47:	/* getgid */
+	case 49:	/* geteuid */
+	case 50:	/* getegid */
+		r = 0;
+		break;
+	case 33:	/* access */
+		r = access((char*)a1, AEXIST) < 0 ? -Enoent : 0;
+		break;
+	case 45:	/* brk */
+		if(a1 >= Brkbase && a1 < Brkbase+Brksize)
+			brkcur = a1;
+		r = brkcur;
+		break;
+	case 54:	/* ioctl */
+		r = -Enotty;
+		break;
+	case 90:	/* old_mmap: ebx points at the arg struct */
+		{
+			ulong *m;
+
+			m = (ulong*)a1;
+			r = sysmmap(m[0], m[1], m[2], m[3], m[4], m[5]);
+		}
+		break;
+	case 91:	/* munmap */
+		r = 0;
+		break;
+	case 122:	/* uname */
+		r = sysuname(a1);
+		break;
+	case 140:	/* _llseek: fd, hi, lo, result*, whence */
+		{
+			vlong o;
+
+			o = seek((int)a1, ((vlong)a2<<32) | a3, ur->di);
+			if(ur->si != 0)
+				*(vlong*)ur->si = o;
+			r = 0;
+		}
+		break;
+	case 145:	/* readv */
+		r = sysreadv(a1, a2, a3);
+		break;
+	case 146:	/* writev */
+		r = syswritev(a1, a2, a3);
+		break;
+	case 174:	/* rt_sigaction */
+	case 175:	/* rt_sigprocmask */
+	case 238:	/* futex: pretend success; TLS-less programs poll */
+		r = 0;
+		break;
+	case 192:	/* mmap2 */
+		r = sysmmap(a1, a2, a3, ur->si, ur->di, ur->bp * Pgsz);
+		break;
+	case 196:	/* lstat64 */
+	case 197:	/* fstat64: a zeroed buffer keeps static startup happy */
+		if(a2 != 0)
+			memset((void*)a2, 0, 96);
+		r = 0;
+		break;
+	}
+	if(verbose)
+		fprint(2, "linuxrun: sys %lux -> %ld\n", nr, r);
+	return r;
+}
+
+/*
+ * The first ud2 trap starts the program (install entry registers);
+ * later ud2 traps are syscalls to emulate and resume.  Anything else
+ * goes to the default disposition.
+ */
+static int
+traphandler(void *v, char *msg)
+{
+	Ureg *ur;
+	uchar *pc;
+
+	USED(msg);
+	if(v == nil)
+		return 0;
+	ur = v;
+	if(ur->trap != TrapUD)
+		return 0;
+	pc = (uchar*)ur->pc;
+	if(pc[0] != 0x0f || pc[1] != 0x0b)
+		return 0;
+	if(!started){
+		started = 1;
+		ur->pc = entrypc;
+		ur->sp = stacktop;
+		ur->ax = 0;
+		ur->bx = 0;
+		ur->cx = 0;
+		ur->dx = 0;
+		ur->si = 0;
+		ur->di = 0;
+		ur->bp = 0;
+		return 1;
+	}
+	ur->ax = dosyscall(ur);
+	ur->pc += 2;
+	return 1;
+}
+
+static uchar trapinsn[2] = {0x0f, 0x0b};
 
 static void
-selftest(void)
+runguest(void)
 {
-	char *path;
+	void (*f)(void);
 
-	path = "/tmp/linuxrun-smoke.elf";
-	if(writesmoke(path) < 0)
-		exits("smoke");
-	if(inspect(path, 1) < 0){
-		remove(path);
-		exits("smoke");
-	}
-	remove(path);
-	print("taiji-linuxrun-smoke-ok\n");
-	exits(nil);
+	atnotify(traphandler, 1);
+	f = (void(*)(void))trapinsn;
+	f();
+	fatal("returned from the guest");	/* not reached */
 }
 
 static void
 usage(void)
 {
-	fprint(2, "usage: linuxrun [-n] linux-elf [args...]\n");
-	fprint(2, "       linuxrun -s\n");
+	fprint(2, "usage: linuxrun [-nv] prog\n");
 	exits("usage");
 }
 
 void
-main(int argc, char **argv)
+main(int argc, char *argv[])
 {
+	Ehdr eh;
+	uchar hdr[64];
+	int fd;
+
 	ARGBEGIN{
 	case 'n':
 		analyzeonly = 1;
 		break;
-	case 's':
-		selftest();
+	case 'v':
+		verbose = 1;
 		break;
 	default:
 		usage();
 	}ARGEND
 	if(argc < 1)
 		usage();
-	if(inspect(argv[0], analyzeonly) < 0)
-		exits("bad elf");
-	if(analyzeonly)
+
+	fd = open(argv[0], OREAD);
+	if(fd < 0)
+		fatal("open %s: %r", argv[0]);
+	if(readat(fd, hdr, sizeof hdr, 0) < 0)
+		fatal("read %s: %r", argv[0]);
+
+	memset(&eh, 0, sizeof eh);
+	memmove(eh.ident, hdr, Elfident);
+	if(eh.ident[EiClass] != Elfclass32 || eh.ident[EiData] != Elfdata2lsb)
+		fatal("%s: not a 32-bit little-endian ELF", argv[0]);
+	eh.type = le16(hdr+16);
+	eh.machine = le16(hdr+18);
+	eh.entry = le32(hdr+24);
+	eh.phoff = le32(hdr+28);
+	eh.phentsize = le16(hdr+42);
+	eh.phnum = le16(hdr+44);
+	if(eh.machine != Em386)
+		fatal("%s: not an i386 binary", argv[0]);
+	if(eh.type != EtExec)
+		fatal("%s: not a static executable (type %d)", argv[0], eh.type);
+	if(eh.phnum > Maxph)
+		fatal("%s: too many program headers", argv[0]);
+
+	if(analyzeonly){
+		print("linuxrun: %s: static 386 Linux ELF entry %#lux\n",
+			argv[0], eh.entry);
 		exits(nil);
-	exits("not implemented");
+	}
+
+	entrypc = eh.entry;
+	loadelf(fd, &eh);
+	close(fd);
+
+	brkcur = Brkbase;
+	segat(Mapbase, Mapsize);
+
+	stacktop = buildstack(argv[0]);
+	if(verbose)
+		fprint(2, "linuxrun: entry %#lux stack %#lux\n", entrypc, stacktop);
+
+	runguest();
+	exits(nil);
 }

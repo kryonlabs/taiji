@@ -130,10 +130,19 @@ if(! mk install){
 	echo taiji-linuxrun-install-failed
 	fshalt
 }
-if(! /386/bin/linuxrun -s){
-	echo taiji-linuxrun-smoke-failed
+# a real static Linux binary must execute: write + exit
+if(! ~ `{linuxrun test/hello.elf} linux-hello-ok){
+	echo taiji-linuxrun-hello-failed
 	fshalt
 }
+# ... and do file I/O through the emulated syscalls
+echo taiji-linuxrun-data-ok >/tmp/linuxrun-data
+if(! ~ `{linuxrun test/file.elf} taiji-linuxrun-data-ok){
+	echo taiji-linuxrun-file-failed
+	fshalt
+}
+rm -f /tmp/linuxrun-data
+echo taiji-linuxrun-smoke-ok
 fshalt
 EOF
 )"
