@@ -48,13 +48,10 @@ case terminal
 	}
 	if(test -r /cfg/q9/predesktop.rc)
 		. /cfg/q9/predesktop.rc
-	catalog=/lib/namespace.sessions
-	if(~ $q9web 1 && test -r /lib/namespace.web.sessions)
-		catalog=/lib/namespace.web.sessions
 	while(){
 		echo q9: gui ready
 		if(test -x /bin/nsselect){
-			nsselect -c $catalog
+			nsselect
 			if(! ~ $status '')
 				exec rc
 		}

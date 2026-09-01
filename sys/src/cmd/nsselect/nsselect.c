@@ -2,15 +2,19 @@
 #include <libc.h>
 #include "kryon.h"
 
-/* Namespace selector for the TaijiOS boot.  Reads a session catalog
- * (id|name|description|command per line), draws the choices with the
- * Kryon runtime so the picker carries the system theme, and launches
- * the chosen command through a pre-forked rc launcher that owns the
- * namespace/session environment.  Choosing nothing (Esc) exits with a
- * non-empty status so the boot profile can drop to a shell. */
+/* Namespace selector for the TaijiOS boot.  Two stages: pick a
+ * namespace from /lib/namespaces, then a window manager from the
+ * /lib/wms entries that declare support for it, and launch the
+ * manager's command through a pre-forked rc launcher that owns the
+ * namespace/session environment.  A click only selects; a second click
+ * of the highlighted card confirms, so a stray click meant to focus
+ * the emulator cannot start a session by itself.  Esc goes back a
+ * stage, and from the first stage exits with a non-empty status so the
+ * boot profile can drop to a shell. */
 
 enum {
-	Maxsessions = 16,
+	Maxns = 16,
+	Maxwm = 32,
 	Fieldlen = 128,
 	Cmdlen = 256,
 	Buflen = 8192,
@@ -19,10 +23,16 @@ enum {
 	Cardgap = 22
 };
 
-typedef struct Session Session;
+typedef struct Ns Ns;
+typedef struct Wm Wm;
 typedef struct Launch Launch;
-struct Session {
+struct Ns {
 	char id[Fieldlen];
+	char name[Fieldlen];
+	char desc[Fieldlen];
+};
+struct Wm {
+	char ns[Fieldlen];
 	char name[Fieldlen];
 	char desc[Fieldlen];
 	char command[Cmdlen];
@@ -32,13 +42,23 @@ struct Launch {
 	char command[Cmdlen];
 };
 
-Session sessions[Maxsessions];
-int nsessions;
-int selected;
+enum {
+	StageNs,
+	StageWm
+};
+
+Ns nss[Maxns];
+int nns;
+Wm wms[Maxwm];
+int nwm;
+int stage = StageNs;
+int nssel;
+int wmsel;
 int launchfd = -1;
 int launchpid = -1;
 
-char *catalog = "/lib/namespace.sessions";
+char *nspath = "/lib/namespaces";
+char *wmpath = "/lib/wms";
 
 void
 trim(char *s)
@@ -70,10 +90,45 @@ copystr(char *dst, int ndst, char *src)
 	dst[n] = 0;
 }
 
+/* Split buf into | separated fields without modifying buf. */
 int
-loadsessions(char *path)
+splitfields(char *line, char *fields[], int nf)
 {
-	char buf[Buflen+1], *lines[Maxsessions*2], *fields[4];
+	char *p, *e;
+	int i, n;
+
+	p = line;
+	for(i = 0; i < nf; i++){
+		e = strchr(p, '|');
+		if(e == nil){
+			fields[i] = p;
+			return i+1;
+		}
+		n = e - p;
+		fields[i] = malloc(n+1);
+		if(fields[i] == nil)
+			return i;
+		memmove(fields[i], p, n);
+		fields[i][n] = 0;
+		p = e+1;
+	}
+	return nf;
+}
+
+void
+freefields(char *fields[], int nf)
+{
+	int i;
+
+	for(i = 0; i < nf; i++)
+		free(fields[i]);
+}
+
+int
+loadnamespaces(char *path)
+{
+	char buf[Buflen+1], *lines[Maxns*2];
+	char *f[8];
 	int fd, n, nl, nf, i;
 
 	fd = open(path, OREAD);
@@ -85,31 +140,66 @@ loadsessions(char *path)
 		return -1;
 	buf[n] = 0;
 	nl = getfields(buf, lines, nelem(lines), 1, "\n");
-	nsessions = 0;
-	for(i = 0; i < nl && nsessions < Maxsessions; i++){
+	nns = 0;
+	for(i = 0; i < nl && nns < Maxns; i++){
 		trim(lines[i]);
 		if(lines[i][0] == 0 || lines[i][0] == '#')
 			continue;
-		nf = getfields(lines[i], fields, nelem(fields), 0, "|");
-		if(nf < 4)
-			continue;
-		trim(fields[0]);
-		trim(fields[1]);
-		trim(fields[2]);
-		trim(fields[3]);
-		if(fields[0][0] == 0 || fields[1][0] == 0 || fields[3][0] == 0)
-			continue;
-		copystr(sessions[nsessions].id, sizeof sessions[nsessions].id,
-		    fields[0]);
-		copystr(sessions[nsessions].name, sizeof sessions[nsessions].name,
-		    fields[1]);
-		copystr(sessions[nsessions].desc, sizeof sessions[nsessions].desc,
-		    fields[2]);
-		copystr(sessions[nsessions].command,
-		    sizeof sessions[nsessions].command, fields[3]);
-		nsessions++;
+		nf = splitfields(lines[i], f, 3);
+		if(nf == 3){
+			trim(f[0]);
+			trim(f[1]);
+			trim(f[2]);
+			if(f[0][0] != 0 && f[1][0] != 0){
+				copystr(nss[nns].id, sizeof nss[nns].id, f[0]);
+				copystr(nss[nns].name, sizeof nss[nns].name, f[1]);
+				copystr(nss[nns].desc, sizeof nss[nns].desc, f[2]);
+				nns++;
+			}
+		}
+		freefields(f, nf);
 	}
-	return nsessions;
+	return nns;
+}
+
+int
+loadwms(char *path)
+{
+	char buf[Buflen+1], *lines[Maxwm*2];
+	char *f[8];
+	int fd, n, nl, nf, i;
+
+	fd = open(path, OREAD);
+	if(fd < 0)
+		return -1;
+	n = read(fd, buf, Buflen);
+	close(fd);
+	if(n < 0)
+		return -1;
+	buf[n] = 0;
+	nl = getfields(buf, lines, nelem(lines), 1, "\n");
+	nwm = 0;
+	for(i = 0; i < nl && nwm < Maxwm; i++){
+		trim(lines[i]);
+		if(lines[i][0] == 0 || lines[i][0] == '#')
+			continue;
+		nf = splitfields(lines[i], f, 4);
+		if(nf == 4){
+			trim(f[0]);
+			trim(f[1]);
+			trim(f[2]);
+			trim(f[3]);
+			if(f[0][0] != 0 && f[1][0] != 0 && f[3][0] != 0){
+				copystr(wms[nwm].ns, sizeof wms[nwm].ns, f[0]);
+				copystr(wms[nwm].name, sizeof wms[nwm].name, f[1]);
+				copystr(wms[nwm].desc, sizeof wms[nwm].desc, f[2]);
+				copystr(wms[nwm].command, sizeof wms[nwm].command, f[3]);
+				nwm++;
+			}
+		}
+		freefields(f, nf);
+	}
+	return nwm;
 }
 
 void
@@ -225,19 +315,34 @@ opaque_color(Color color)
 }
 
 int
-cardcols(void)
+wmlist(Wm *out, int cap)
 {
-	return nsessions > 1 ? 2 : 1;
+	int i, n;
+
+	n = 0;
+	for(i = 0; i < nwm && n < cap; i++)
+		if(strcmp(wms[i].ns, nss[nssel].id) == 0)
+			out[n++] = wms[i];
+	return n;
+}
+
+int
+cards(int n)
+{
+	int cols;
+
+	cols = n > 1 ? 2 : 1;
+	return cols;
 }
 
 Rectangle
-cardrect(int i)
+cardrect(int i, int n)
 {
 	int cols, rows, totalw, totalh;
 	Rectangle r;
 
-	cols = cardcols();
-	rows = (nsessions + cols - 1) / cols;
+	cols = cards(n);
+	rows = (n + cols - 1) / cols;
 	totalw = cols*Cardw + (cols-1)*Cardgap;
 	totalh = rows*Cardh + (rows-1)*Cardgap;
 	r.x = (GetScreenWidth() - totalw)/2 + (i%cols)*(Cardw+Cardgap);
@@ -256,19 +361,16 @@ drawcentered(char *s, int y, int size, Color color)
 	DrawText(s, x, y, size, color);
 }
 
-/* Returns the session index clicked this frame, or -1.  A click only
- * selects; launching happens on a second click of the highlighted card
- * (see main), so a stray click meant to focus the emulator cannot start
- * a session by itself. */
+/* Draw a card.  Returns 1 when it is clicked this frame. */
 int
-drawsession(int i)
+drawcard(int i, int n, int selected, char *title, char *sub, char *tag)
 {
 	Rectangle r, stripe;
 	Vector2 mouse;
 	Color fill;
 	int hover;
 
-	r = cardrect(i);
+	r = cardrect(i, n);
 	mouse = GetMousePosition();
 	hover = CheckCollisionPointRec(mouse, r);
 	if(i == selected)
@@ -286,28 +388,26 @@ drawsession(int i)
 	stripe.height = 6;
 	DrawRectangleRec(stripe, i == selected ?
 	    opaque_color(GetThemeLink()) : Fade(GetThemeLink(), 0.55f));
-	DrawText(sessions[i].name, (int)r.x + 16, (int)r.y + 34, 21,
+	DrawText(title, (int)r.x + 16, (int)r.y + 34, 21,
 	    opaque_color(GetThemeText()));
-	DrawText(sessions[i].desc, (int)r.x + 16, (int)r.y + 64, 14,
+	DrawText(sub, (int)r.x + 16, (int)r.y + 64, 14,
 	    Fade(GetThemeText(), 0.62f));
-	DrawText(sessions[i].id, (int)r.x + 16, (int)r.y + 86, 13,
+	DrawText(tag, (int)r.x + 16, (int)r.y + 86, 13,
 	    Fade(GetThemeText(), 0.45f));
-	if(hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-		return i;
-	return -1;
+	return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
 void
-startsession(Session *s)
+startsession(Wm *wm)
 {
 	Launch l;
 
 	memset(&l, 0, sizeof l);
-	copystr(l.id, sizeof l.id, s->id);
-	copystr(l.command, sizeof l.command, s->command);
+	copystr(l.id, sizeof l.id, nss[nssel].id);
+	copystr(l.command, sizeof l.command, wm->command);
 	CloseWindow();
 	if(launchfd < 0 || writefull(launchfd, &l, sizeof l) != sizeof l)
-		sysfatal("launch %s failed: %r", s->command);
+		sysfatal("launch %s failed: %r", wm->command);
 	close(launchfd);
 	launchfd = -1;
 	waitsession();
@@ -317,18 +417,22 @@ startsession(Session *s)
 void
 usage(void)
 {
-	fprint(2, "usage: nsselect [-c catalog]\n");
+	fprint(2, "usage: nsselect [-n namespaces] [-w windowmanagers]\n");
 	exits("usage");
 }
 
 void
 main(int argc, char *argv[])
 {
-	int i, pick, blocktop, wasselected;
+	Wm cur[Maxwm];
+	int i, ncur, pick, blocktop, wasselected;
 
 	ARGBEGIN{
-	case 'c':
-		catalog = EARGF(usage());
+	case 'n':
+		nspath = EARGF(usage());
+		break;
+	case 'w':
+		wmpath = EARGF(usage());
 		break;
 	default:
 		usage();
@@ -336,8 +440,10 @@ main(int argc, char *argv[])
 	if(argc != 0)
 		usage();
 
-	if(loadsessions(catalog) <= 0)
-		sysfatal("no namespace sessions in %s", catalog);
+	if(loadnamespaces(nspath) <= 0)
+		sysfatal("no namespaces in %s", nspath);
+	if(loadwms(wmpath) <= 0)
+		sysfatal("no window managers in %s", wmpath);
 	startlauncher();
 
 	SetSingleInstance(0);
@@ -356,21 +462,37 @@ main(int argc, char *argv[])
 	ApplyCurrentUITheme();
 
 	while(!WindowShouldClose()){
+		ncur = wmlist(cur, nelem(cur));
+		if(wmsel >= ncur)
+			wmsel = 0;
+
 		if(IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_UP)){
-			if(selected > 0)
-				selected--;
+			if(stage == StageNs && nssel > 0)
+				nssel--;
+			if(stage == StageWm && wmsel > 0)
+				wmsel--;
 		}
 		if(IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_DOWN) ||
 		    IsKeyPressed(KEY_TAB)){
-			if(selected < nsessions-1)
-				selected++;
+			if(stage == StageNs && nssel < nns-1)
+				nssel++;
+			if(stage == StageWm && wmsel < ncur-1)
+				wmsel++;
 		}
 		if(IsKeyPressed(KEY_ESCAPE)){
-			CloseWindow();
-			exits("cancel");
+			if(stage == StageWm){
+				stage = StageNs;
+			}else{
+				CloseWindow();
+				exits("cancel");
+			}
 		}
-		if(IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
-			startsession(&sessions[selected]);
+		if(IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)){
+			if(stage == StageNs)
+				stage = StageWm;
+			else
+				startsession(&cur[wmsel]);
+		}
 
 		pick = -1;
 		BeginDrawing();
@@ -378,28 +500,46 @@ main(int argc, char *argv[])
 		BeginUIFrame(GetScreenWidth(), GetScreenHeight(), 1.0f);
 		BeginUI(0x6e73656c);
 		blocktop = GetScreenHeight()/2 - 24;
-		drawcentered("Select namespace", blocktop - 96, 30,
-		    opaque_color(GetThemeText()));
-		drawcentered("Choose the session namespace to start",
-		    blocktop - 56, 15, Fade(GetThemeText(), 0.62f));
-		wasselected = selected;
-		for(i = 0; i < nsessions; i++){
-			if(drawsession(i) >= 0){
-				/* first click selects, clicking the already
-				 * highlighted card launches it */
-				if(i == wasselected)
-					pick = i;
-				else
-					selected = i;
+		if(stage == StageNs){
+			drawcentered("Select namespace", blocktop - 96, 30,
+			    opaque_color(GetThemeText()));
+			drawcentered("Choose the TaijiOS namespace to start",
+			    blocktop - 56, 15, Fade(GetThemeText(), 0.62f));
+			wasselected = nssel;
+			for(i = 0; i < nns; i++){
+				if(drawcard(i, nns, i == nssel, nss[i].name,
+				    nss[i].desc, nss[i].id)){
+					if(i == wasselected)
+						stage = StageWm;
+					else
+						nssel = i;
+				}
 			}
+			drawcentered("Enter chooses  |  arrows move  |  Esc exits",
+			    GetScreenHeight() - 46, 14, Fade(GetThemeText(), 0.55f));
+		}else{
+			drawcentered("Select window manager", blocktop - 96, 30,
+			    opaque_color(GetThemeText()));
+			drawcentered(nss[nssel].name, blocktop - 56, 15,
+			    Fade(GetThemeText(), 0.62f));
+			wasselected = wmsel;
+			for(i = 0; i < ncur; i++){
+				if(drawcard(i, ncur, i == wmsel, cur[i].name,
+				    cur[i].desc, nss[nssel].id)){
+					if(i == wasselected)
+						pick = i;
+					else
+						wmsel = i;
+				}
+			}
+			drawcentered("Enter or double-click starts  |  Esc goes back",
+			    GetScreenHeight() - 46, 14, Fade(GetThemeText(), 0.55f));
 		}
-		drawcentered("Enter or double-click starts  |  arrows move  |  Esc exits",
-		    GetScreenHeight() - 46, 14, Fade(GetThemeText(), 0.55f));
 		EndUI();
 		EndUIFrame();
 		EndDrawing();
 		if(pick >= 0)
-			startsession(&sessions[pick]);
+			startsession(&cur[pick]);
 	}
 	CloseWindow();
 	exits("cancel");

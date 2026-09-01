@@ -1,5 +1,0 @@
-# id|display name|description|command
-# Web boot catalog: sessions the browser image can run (Wine needs a rootfs image).
-rill|Rill|Taiji desktop namespace|rill
-plan9|Plan 9|Original Rio namespace|rio9 -k 'rc -i'
-debian|Debian|Debian-style root namespace with Rill|debian-session rill
