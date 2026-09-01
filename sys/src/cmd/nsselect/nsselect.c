@@ -256,7 +256,10 @@ drawcentered(char *s, int y, int size, Color color)
 	DrawText(s, x, y, size, color);
 }
 
-/* Returns the session index picked by a click this frame, or -1. */
+/* Returns the session index clicked this frame, or -1.  A click only
+ * selects; launching happens on a second click of the highlighted card
+ * (see main), so a stray click meant to focus the emulator cannot start
+ * a session by itself. */
 int
 drawsession(int i)
 {
@@ -321,7 +324,7 @@ usage(void)
 void
 main(int argc, char *argv[])
 {
-	int i, pick, blocktop;
+	int i, pick, blocktop, wasselected;
 
 	ARGBEGIN{
 	case 'c':
@@ -379,13 +382,18 @@ main(int argc, char *argv[])
 		    opaque_color(GetThemeText()));
 		drawcentered("Choose the session namespace to start",
 		    blocktop - 56, 15, Fade(GetThemeText(), 0.62f));
+		wasselected = selected;
 		for(i = 0; i < nsessions; i++){
 			if(drawsession(i) >= 0){
-				selected = i;
-				pick = i;
+				/* first click selects, clicking the already
+				 * highlighted card launches it */
+				if(i == wasselected)
+					pick = i;
+				else
+					selected = i;
 			}
 		}
-		drawcentered("Enter starts  |  arrows move  |  Esc exits",
+		drawcentered("Enter or double-click starts  |  arrows move  |  Esc exits",
 		    GetScreenHeight() - 46, 14, Fade(GetThemeText(), 0.55f));
 		EndUI();
 		EndUIFrame();
