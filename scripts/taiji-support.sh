@@ -186,6 +186,26 @@ chmod +x $tmp/data/usr/bin/taiji-deb-smoke
 @{builtin cd $tmp/control && tar cf $tmp/control.tar control}
 @{builtin cd $tmp/data && tar cf $tmp/data.tar .}
 @{builtin cd $tmp && ar rc $pkg debian-binary control.tar data.tar}
+mkdir $tmp/binpkg $tmp/binpkg/control $tmp/binpkg/data
+mkdir $tmp/binpkg/data/usr $tmp/binpkg/data/usr/bin
+cat >$tmp/binpkg/hello.c <<'CC'
+#include <u.h>
+#include <libc.h>
+void main(void){ print("taiji-deb-binary-ok\n"); exits(nil); }
+CC
+@{builtin cd $tmp/binpkg && 8c hello.c && 8l -o data/usr/bin/taiji-hello hello.8} || echo taiji-debian-compile-failed
+chmod +x $tmp/binpkg/data/usr/bin/taiji-hello
+{
+	echo 'Package: taiji-hello'
+	echo 'Version: 1.0'
+	echo 'Architecture: 386'
+	echo 'Maintainer: TaijiOS'
+	echo 'Description: compiled binary payload smoke'
+} >$tmp/binpkg/control/control
+@{builtin cd $tmp/binpkg/control && tar cf $tmp/binpkg/control.tar control}
+@{builtin cd $tmp/binpkg/data && tar cf $tmp/binpkg/data.tar .}
+@{builtin cd $tmp/binpkg && gzip -9 data.tar}
+@{builtin cd $tmp/binpkg && ar rc /debian/rootfs/tmp/taiji-deb-bin.deb debian-binary control.tar data.tgz} || echo taiji-debian-binpack-failed
 debian-session -c '
 if(! ~ `{pwd} /root){
 	echo taiji-debian-pwd-failed
@@ -232,7 +252,20 @@ if(! grep -s taiji-deb-smoke /tmp/taiji-deb-root/var/lib/dpkg/status){
 	echo taiji-debian-status-missing
 	exit failed
 }
+if(! dpkg --root /tmp/taiji-deb-bin-root -i /tmp/taiji-deb-bin.deb){
+	echo taiji-debian-bin-install-failed
+	exit failed
+}
+if(! test -x /tmp/taiji-deb-bin-root/usr/bin/taiji-hello){
+	echo taiji-debian-bin-missing
+	exit failed
+}
+if(! ~ `{/tmp/taiji-deb-bin-root/usr/bin/taiji-hello} taiji-deb-binary-ok){
+	echo taiji-debian-bin-run-failed
+	exit failed
+}
 rm -rf /tmp/taiji-deb-root /tmp/taiji-deb-smoke.deb >/dev/null >[2=1]
+rm -rf /tmp/taiji-deb-bin-root /tmp/taiji-deb-bin.deb >/dev/null >[2=1]
 echo taiji-debian-session-ok
 exit
 '

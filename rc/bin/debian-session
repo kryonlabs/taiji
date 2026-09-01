@@ -59,6 +59,11 @@ if(! bind /rc $root/rc)
 # payloads still write into the rootfs.
 if(! bind -a /lib $root/lib)
 	fail 'cannot bind TaijiOS libraries'
+# Bootstrap the Debian root with the TaijiOS toolchain behind the rootfs
+# own /bin and /usr/bin: commands work before any package is installed,
+# and packages extracted later shadow these, not the other way round.
+bind -a /$cputype/bin $root/bin >/dev/null >[2=1]
+bind -a /$cputype/bin $root/usr/bin >/dev/null >[2=1]
 if(test -d /$cputype/bin/ape)
 	bind -a /$cputype/bin/ape $root/taiji/ape/bin >/dev/null >[2=1]
 

@@ -70,8 +70,8 @@ if(! builtin cd $tmp)
 if(! ar t $pkg >members)
 	fail 'not a readable ar archive: '^$pkg
 
-data=`{grep '^data\.tar' members | sed 1q}
-control=`{grep '^control\.tar' members | sed 1q}
+data=`{grep '^data\.(tar|tgz|tbz)' members | sed 1q}
+control=`{grep '^control\.(tar|tgz|tbz)' members | sed 1q}
 
 if(~ $#data 0)
 	fail 'missing data.tar member'
