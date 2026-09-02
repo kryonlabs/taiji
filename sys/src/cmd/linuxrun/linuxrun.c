@@ -1148,8 +1148,22 @@ dosyscall(Ureg *ur)
 	case 238:	/* sendfile: not yet */
 		r = 0;
 		break;
-	case 163:	/* mremap */
-		r = -Enomem;
+	case 163:	/* mremap: MAYMOVE semantics - copy to a new range */
+		{
+			ulong newsz;
+
+			newsz = ((a3 + Pgsz-1) / Pgsz) * Pgsz;
+			if(mapbump + newsz > Mapbase + Mapsize)
+				r = -Enomem;
+			else{
+				ulong nva;
+
+				nva = mapbump;
+				mapbump += newsz;
+				memmove((void*)nva, (void*)a1, a2 < a3 ? a2 : a3);
+				r = nva;
+			}
+		}
 		break;
 	case 192:	/* mmap2 */
 		r = sysmmap(a1, a2, a3, ur->si, ur->di, ur->bp * Pgsz);
