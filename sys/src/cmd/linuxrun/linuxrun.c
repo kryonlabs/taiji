@@ -24,8 +24,12 @@ enum {
 	Elfdata2lsb = 1,
 	Em386 = 3,
 	EtExec = 2,
+	EtDyn = 3,
 	PtLoad = 1,
 	PtInterp = 3,
+
+	Piebase = 0x08000000,	/* where PIE mains land */
+	Interpbase = 0x48000000,/* where ld-linux lands */
 
 	Maxph = 64,
 	Rungap = 64*1024,	/* merge PT_LOADs closer than this */
@@ -91,6 +95,7 @@ int verbose;
 int analyzeonly;
 int started;
 ulong entrypc;
+ulong mainentry;	/* AT_ENTRY: the main program's entry */
 ulong stacktop;
 Phdr ph[Maxph];
 int nph;
@@ -104,6 +109,13 @@ int phdrmode;	/* 0: phdr array, 1: ehdr, 2: omit */
 ulong execfnva;
 ulong platformva;
 int nphhdrs;
+char interppath[256];
+ulong interpbase;
+int dynamic;
+
+static ulong loadelf(int, Ehdr*, ulong);
+static void initsysinfo(void);
+static long syssetthreadarea(ulong);
 
 static void
 fatal(char *fmt, ...)
@@ -178,15 +190,13 @@ readat(int fd, void *buf, long n, vlong off)
  * for binaries that never execute an int 80, which is not a thing we
  * care to run.
  */
-static void
-loadelf(int fd, Ehdr *eh)
+static ulong
+loadelf(int fd, Ehdr *eh, ulong base)
 {
 	uchar buf[Maxph*sizeof(Phdr)];
 	uchar *seg;
 	ulong va, lo, hi, off;
 	int i, j, k, patched;
-
-	USED(va);
 
 	if(readat(fd, buf, eh->phnum*eh->phentsize, eh->phoff) < 0)
 		fatal("read program headers: %r");
@@ -199,8 +209,20 @@ loadelf(int fd, Ehdr *eh)
 		ph[nph].memsz = le32(buf+i*eh->phentsize+20);
 		ph[nph].flags = le32(buf+i*eh->phentsize+24);
 		ph[nph].align = le32(buf+i*eh->phentsize+28);
-		if(ph[nph].type == PtInterp)
-			fatal("dynamic ELF: interpreter support is not built yet");
+		ph[nph].vaddr += base;
+		if(ph[nph].type == PtInterp){
+			uchar ipath[256];
+			int n;
+
+			n = ph[nph].filesz;
+			if(n > 255)
+				n = 255;
+			if(readat(fd, ipath, n, ph[nph].offset) < 0)
+				fatal("read interp: %r");
+			ipath[n] = 0;
+			memmove(interppath, ipath, n+1);
+			dynamic = 1;
+		}
 		nph++;
 	}
 
@@ -246,10 +268,11 @@ loadelf(int fd, Ehdr *eh)
 			i++;
 		}
 	}
-	if(patched == 0)
+	if(patched == 0 && !dynamic)
 		fprint(2, "linuxrun: warning: no int 80 sites patched\n");
 	else if(verbose)
 		fprint(2, "linuxrun: patched %d syscall sites\n", patched);
+	return eh->entry + base;
 }
 
 /*
@@ -302,8 +325,8 @@ buildstack(int nargs, char **args)
 		vec[i++] = 5; vec[i++] = nphhdrs;
 	}
 	vec[i++] = 6; vec[i++] = Pgsz;
-	vec[i++] = 7; vec[i++] = 0;
-	vec[i++] = 9; vec[i++] = entrypc;
+	vec[i++] = 7; vec[i++] = interpbase;
+	vec[i++] = 9; vec[i++] = mainentry;
 	vec[i++] = 17; vec[i++] = 100;
 	vec[i++] = 4; vec[i++] = 32;
 	vec[i++] = 8; vec[i++] = 0;
@@ -414,26 +437,23 @@ sysopen(ulong path, ulong flags, ulong mode)
 			return -Enoent;
 	}
 	fd = open(p, pmode);
-	if(fd < 0)
+	if(fd < 0){
+		if(verbose)
+			fprint(2, "linuxrun: open %s: %r\n", p);
 		return -Enoent;
+	}
 	return fd;
 }
 
 static ulong mapbump = Mapbase + Brksize + Pgsz;
 
-/* glibc's i386 syscall stub calls through the TCB sysinfo pointer
- * (AT_SYSINFO) rather than int $0x80 for some syscalls; give it a
- * ud2;ret trampoline so those funnel into the same emulator. */
 static void
-initsysinfo(void)
+zerorange(ulong va, ulong len)
 {
-	uchar *p;
+	ulong a;
 
-	p = (uchar*)(Mapbase + Brksize);
-	p[0] = 0x0f;
-	p[1] = 0x0b;
-	p[2] = 0xc3;
-	sysinfova = (ulong)p;
+	for(a = va & ~(Pgsz-1); a < va+len; a += Pgsz)
+		memset((void*)a, 0, Pgsz);
 }
 
 static long
@@ -441,20 +461,66 @@ sysmmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong off)
 {
 	ulong va;
 
-	USED(addr);
 	USED(prot);
+	if(verbose)
+		fprint(2, "linuxrun: mmap? addr=%#lux len=%#lux flags=%#lux fd=%d off=%#lux\n",
+			addr, len, flags, (int)fd, off);
 	if(len == 0)
 		return -Einval;
 	len = ((len + Pgsz-1) / Pgsz) * Pgsz;
-	if(mapbump + len > Mapbase + Mapsize)
-		return -Enomem;
-	va = mapbump;
-	mapbump += len;
+	if(flags & 0x10){	/* MAP_FIXED: the caller chose the address */
+		if(addr == 0 || addr + len > Mapbase + Mapsize || addr < Mapbase)
+			return -Enomem;
+		va = addr;
+		zerorange(va, len);
+	}else{
+		if(addr != 0 && addr >= Mapbase && addr + len <= Mapbase + Mapsize)
+			va = addr;	/* hint we can honour */
+		else{
+			if(mapbump + len > Mapbase + Mapsize)
+				return -Enomem;
+			va = mapbump;
+			mapbump += len;
+		}
+	}
 	if(!(flags & 0x20)){	/* not MAP_ANONYMOUS: fill from the file */
+		if(fd > 0x10000)
+			return -Ebadf;
 		if(readat((int)fd, (void*)va, len, off) < 0)
 			return -Ebadf;
 	}
+	if(verbose)
+		fprint(2, "linuxrun: mmap addr=%#lux len=%#lux flags=%#lux fd=%d off=%#lux -> %#lux\n",
+			addr, len, flags, (int)fd, off, va);
 	return va;
+}
+
+/* fill an i386 struct stat64 so ld.so accepts our files */
+static long
+fillstat64(ulong addr, int fd)
+{
+	uchar *b;
+	Dir *d;
+
+	if(addr == 0)
+		return 0;
+	d = dirfstat(fd);
+	if(d == nil)
+		return -Ebadf;
+	b = (uchar*)addr;
+	memset(b, 0, 96);
+	*(ulong*)(b+16) = 0x81a4;		/* S_IFREG|0444 */
+	*(ulong*)(b+20) = 1;			/* nlink */
+	*(ulong*)(b+12) = (ulong)d->qid.path;	/* __st_ino */
+	*(vlong*)(b+88) = d->qid.path;	/* st_ino: ld.so dedups libraries
+					 * by dev:ino, so every file must
+					 * be unique */
+	*(vlong*)(b+44) = d->length;		/* st_size */
+	if(verbose)
+		fprint(2, "linuxrun: fstat64 fd=%d size=%llud\n", fd, d->length);
+	*(ulong*)(b+52) = 4096;			/* blksize */
+	free(d);
+	return 0;
 }
 
 /* Linux i386 struct user_desc */
@@ -480,7 +546,6 @@ syssetthreadarea(ulong udesc)
 {
 	Userdesc *ud;
 	ulong d0, d1, base;
-	int fd;
 	static uchar desc[8];
 	static int inited;
 
@@ -507,31 +572,52 @@ syssetthreadarea(ulong udesc)
 		inited = 1;
 		ldtfd = open("/dev/ldt", OWRITE);
 		if(ldtfd < 0){
-			/* the device is not in the default namespace */
 			if(bind("#z", "/dev", MAFTER) >= 0)
 				ldtfd = open("/dev/ldt", OWRITE);
 		}
 	}
-	if(ldtfd < 0)
+	if(ldtfd < 0){
+		fprint(2, "linuxrun: ldt open: %r\n");
 		return -Enosys;
-	if(seek(ldtfd, 0, 0) < 0)
+	}
+	if(seek(ldtfd, 0, 0) < 0){
+		fprint(2, "linuxrun: ldt seek: %r\n");
 		return -Enosys;
-	if(write(ldtfd, desc, 8) != 8)
+	}
+	if(write(ldtfd, desc, 8) != 8){
+		fprint(2, "linuxrun: ldt write: %r\n");
 		return -Enosys;
+	}
 	ud->entry_number = 6;
 	return 0;
+}
+
+/* glibc's i386 syscall stub calls through the TCB sysinfo pointer
+ * (AT_SYSINFO) rather than int $0x80 for some syscalls; give it a
+ * ud2;ret trampoline so those funnel into the same emulator. */
+static void
+initsysinfo(void)
+{
+	uchar *p;
+
+	p = (uchar*)(Mapbase + Brksize);
+	p[0] = 0x0f;
+	p[1] = 0x0b;
+	p[2] = 0xc3;
+	sysinfova = (ulong)p;
 }
 
 static long
 dosyscall(Ureg *ur)
 {
-	ulong nr, a1, a2, a3;
+	ulong nr, a1, a2, a3, a4;
 	long r;
 
 	nr = ur->ax;
 	a1 = ur->bx;
 	a2 = ur->cx;
 	a3 = ur->dx;
+	a4 = ur->si;
 	r = -Enosys;
 	switch(nr){
 	case 1:		/* exit */
@@ -558,13 +644,21 @@ dosyscall(Ureg *ur)
 		else
 			r = sysopen(a2, a3, ur->si);
 		break;
-	case 300:	/* fstatat64: zeroed like fstat64 */
-		if(a1 != 0xffffff9cUL)
+	case 300:	/* fstatat64: AT_EMPTY_PATH on an fd, or AT_FDCWD */
+		if(a2 != 0 && ((char*)a2)[0] == 0 || a4 & 0x1000)
+			r = fillstat64(a3, (int)a1);
+		else if(a1 != 0xffffff9cUL)
 			r = -Ebadf;
 		else{
-			if(a3 != 0)
-				memset((void*)a3, 0, 96);
-			r = 0;
+			int sfd;
+
+			sfd = open((char*)a2, OREAD);
+			if(sfd < 0)
+				r = -Enoent;
+			else{
+				r = fillstat64(a3, sfd);
+				close(sfd);
+			}
 		}
 		break;
 	case 6:		/* close */
@@ -672,10 +766,15 @@ dosyscall(Ureg *ur)
 		r = sysmmap(a1, a2, a3, ur->si, ur->di, ur->bp * Pgsz);
 		break;
 	case 196:	/* lstat64 */
-	case 197:	/* fstat64: a zeroed buffer keeps static startup happy */
-		if(a2 != 0)
-			memset((void*)a2, 0, 96);
-		r = 0;
+	case 197:	/* fstat64: real mode/size so ld.so accepts the file */
+		r = fillstat64(a2, (int)a1);
+		break;
+	case 180:	/* pread64: fd, buf, count, poslo, poshi */
+		r = seek((int)a1, ((vlong)ur->di<<32) | ur->si, 0);
+		if(r < 0)
+			r = -Ebadf;
+		else
+			r = read((int)a1, (void*)a2, a3);
 		break;
 	case 258:	/* set_tid_address */
 		r = getpid();
@@ -831,8 +930,8 @@ main(int argc, char *argv[])
 	eh.phnum = le16(hdr+44);
 	if(eh.machine != Em386)
 		fatal("%s: not an i386 binary", argv[0]);
-	if(eh.type != EtExec)
-		fatal("%s: not a static executable (type %d)", argv[0], eh.type);
+	if(eh.type != EtExec && eh.type != EtDyn)
+		fatal("%s: not an executable (type %d)", argv[0], eh.type);
 	if(eh.phnum > Maxph)
 		fatal("%s: too many program headers", argv[0]);
 
@@ -842,9 +941,9 @@ main(int argc, char *argv[])
 		exits(nil);
 	}
 
-	entrypc = eh.entry;
 	nphhdrs = eh.phnum;
-	loadelf(fd, &eh);
+	entrypc = loadelf(fd, &eh, eh.type == EtDyn ? Piebase : 0);
+	mainentry = entrypc;
 	close(fd);
 	/* the phdrs live in the first PT_LOAD; translate the file offset */
 	phdrva = 0;
@@ -868,6 +967,39 @@ main(int argc, char *argv[])
 	}
 	if(verbose)
 		fprint(2, "linuxrun: phdr %#lux\n", phdrva);
+
+	/* dynamic: load the interpreter and hand control to it */
+	if(dynamic){
+		int ifd;
+		Ehdr ieh;
+		uchar ihdr[64];
+
+		if(interppath[0] == 0)
+			fatal("no interpreter path");
+		ifd = open(interppath, OREAD);
+		if(ifd < 0)
+			fatal("open %s: %r", interppath);
+		if(readat(ifd, ihdr, sizeof ihdr, 0) < 0)
+			fatal("read %s: %r", interppath);
+		memset(&ieh, 0, sizeof ieh);
+		memmove(ieh.ident, ihdr, Elfident);
+		ieh.type = le16(ihdr+16);
+		ieh.machine = le16(ihdr+18);
+		ieh.entry = le32(ihdr+24);
+		ieh.phoff = le32(ihdr+28);
+		ieh.phentsize = le16(ihdr+42);
+		ieh.phnum = le16(ihdr+44);
+		if(ieh.machine != Em386 || ieh.type != EtDyn)
+			fatal("%s: not an i386 shared interpreter", interppath);
+		interpbase = Interpbase;
+		loadelf(ifd, &ieh, interpbase);
+		close(ifd);
+		/* ld.so enters; AT_ENTRY/AT_PHDR still describe the main */
+		entrypc = interpbase + ieh.entry;
+		if(verbose)
+			fprint(2, "linuxrun: interp %s base %#lux entry %#lux\n",
+				interppath, interpbase, entrypc);
+	}
 
 	brkcur = Brkbase;
 	segat(Mapbase, Mapsize);

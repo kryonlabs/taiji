@@ -158,6 +158,17 @@ if(! ~ `{linuxrun test/busybox.elf cat /tmp/linuxrun-cat} taiji-linuxrun-cat-ok)
 	fshalt
 }
 rm -f /tmp/linuxrun-cat
+# ... and a dynamically-linked Debian binary through ld.so and libc.so.6
+mkdir -p /debian/rootfs/lib/i386-linux-gnu /debian/rootfs/bin
+cp test/dyn/ld-linux.so.2 /debian/rootfs/lib/
+cp test/dyn/libc.so.6 /debian/rootfs/lib/i386-linux-gnu/
+cp test/dyn/echo.bin /debian/rootfs/bin/echo
+debian-session -c 'linuxrun /bin/echo taiji-dynamic-echo-ok' >/tmp/linuxrun-dyn.out >[2] /tmp/linuxrun-dyn.out
+if(! grep -s taiji-dynamic-echo-ok /tmp/linuxrun-dyn.out){
+	echo taiji-linuxrun-dynamic-failed
+	fshalt
+}
+rm -f /tmp/linuxrun-dyn.out
 echo taiji-linuxrun-smoke-ok
 fshalt
 EOF
