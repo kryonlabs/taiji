@@ -31,6 +31,9 @@ enum {
 	Piebase = 0x08000000,	/* where PIE mains land */
 	Interpbase = 0x48000000,/* where ld-linux lands */
 
+	LcVmnul = 0x100,	/* CLONE_VM */
+	Enoexec = 8,
+
 	Maxph = 64,
 	Rungap = 64*1024,	/* merge PT_LOADs closer than this */
 
@@ -102,6 +105,27 @@ int nph;
 ulong brkcur;
 char exitstr[16];
 int ldtfd = -1;
+int initedtls;
+
+ulong guestsegs[16][2];
+int nguestsegs;
+
+/* AF_UNIX sockets bridged over plan9 pipes: the listener publishes
+ * "spid fd" at the socket path; connect opens /proc/spid/fd and hands
+ * over its own two data pipes; accept reads the request. */
+int listenerfd = -1;	/* read end of the active listener pipe */
+
+/* epoll: a table of registered fds per epoll fd; wait reports every
+ * registered fd ready (the single-threaded server then blocks in the
+ * read that matters). */
+enum { Maxep = 256 };
+struct Epev {
+	int epfd;
+	int fd;
+	ulong events;
+	ulong data;
+};
+struct Epev eptab[Maxep];
 ulong phdrva;
 ulong randva;
 ulong sysinfova;
@@ -116,6 +140,11 @@ int dynamic;
 static ulong loadelf(int, Ehdr*, ulong);
 static void initsysinfo(void);
 static long syssetthreadarea(ulong);
+static long sysexecve(char*, char**);
+static int countargs(char**);
+static long dosocketcall(ulong);
+static long sysgetdents64(int, ulong, ulong);
+static long dofutex(ulong, ulong, ulong, ulong);
 
 static void
 fatal(char *fmt, ...)
@@ -165,7 +194,17 @@ segat(ulong va, ulong len)
 {
 	void *p;
 
-	p = segattach(0, "memory", (void*)va, len);
+	if(nguestsegs < 16){
+		guestsegs[nguestsegs][0] = va;
+		guestsegs[nguestsegs][1] = len;
+		nguestsegs++;
+	}
+
+	/* "shared": guest memory must survive rfork whole (clone threads,
+	 * fork+exec children) rather than copy-on-write */
+	p = segattach(0, "shared", (void*)va, len);
+	if(p == (void*)-1)
+		p = segattach(0, "memory", (void*)va, len);
 	if(p == (void*)-1){
 		fprint(2, "linuxrun: segattach %#lux %#lux: %r\n", va, len);
 		dumpsegments();
@@ -547,7 +586,6 @@ syssetthreadarea(ulong udesc)
 	Userdesc *ud;
 	ulong d0, d1, base;
 	static uchar desc[8];
-	static int inited;
 
 	if(udesc == 0)
 		return -Efault;
@@ -568,8 +606,8 @@ syssetthreadarea(ulong udesc)
 	desc[5] = (d1>>8) & 0xFF;
 	desc[6] = (d1>>16) & 0xFF;
 	desc[7] = (d1>>24) & 0xFF;
-	if(!inited){
-		inited = 1;
+	if(!initedtls){
+		initedtls = 1;
 		ldtfd = open("/dev/ldt", OWRITE);
 		if(ldtfd < 0){
 			if(bind("#z", "/dev", MAFTER) >= 0)
@@ -607,10 +645,361 @@ initsysinfo(void)
 	sysinfova = (ulong)p;
 }
 
+
+/* ---- AF_UNIX over plan9 pipes ---- */
+static long
+sysbindlisten(ulong path)
+{
+	char buf[512], req[512];
+	int p[2], fd;
+
+	if(path == 0)
+		return -Efault;
+	if(pipe(p) < 0)
+		return -Enomem;
+	snprint(req, sizeof req, "%s.req", (char*)path);
+	fd = create(req, OWRITE|OTRUNC, 0666);
+	if(fd < 0)
+		fd = create(req, OWRITE, 0666);
+	if(fd < 0){
+		close(p[0]);
+		close(p[1]);
+		return -Enoent;
+	}
+	snprint(buf, sizeof buf, "%d %d\n", getpid(), p[1]);
+	if(write(fd, buf, strlen(buf)) < 0){
+		close(fd);
+		close(p[0]);
+		close(p[1]);
+		return -Enomem;
+	}
+	close(fd);
+	listenerfd = p[0];
+	return 0;
+}
+
+static int sscanf3(char*, int*, int*, int*);
+
+static long
+sysconnect(ulong path)
+{
+	char buf[512], line[128];
+	int sfd, c2s[2], s2c[2], n, spid, lfd;
+	char target[128];
+
+	if(path == 0)
+		return -Efault;
+	snprint(buf, sizeof buf, "%s.req", (char*)path);
+	sfd = open(buf, OREAD);
+	if(sfd < 0)
+		return -Enoent;
+	n = readn(sfd, line, sizeof line-1);
+	close(sfd);
+	if(n <= 0)
+		return -Enoent;
+	line[n] = 0;
+	if(sscanf3(line, &spid, &lfd, &lfd) < 2)
+		return -Enoent;
+	if(pipe(c2s) < 0 || pipe(s2c) < 0)
+		return -Enomem;
+	snprint(target, sizeof target, "/proc/%d/fd/%d", spid, lfd);
+	sfd = open(target, OWRITE);
+	if(sfd < 0)
+		return -Enoent;
+	snprint(line, sizeof line, "%d %d %d\n", getpid(), c2s[1], s2c[0]);
+	if(write(sfd, line, strlen(line)) < 0)
+		return -Enomem;
+	close(sfd);
+	close(c2s[1]);
+	close(s2c[0]);
+	return (c2s[0]<<16) | s2c[1];
+}
+
+/* minimal "%%d %%d[ %%d]" line parser for the socket bridge */
+static int
+sscanf3(char *s, int *a, int *b, int *c)
+{
+	int n, v;
+
+	n = 0;
+	while(*s){
+		while(*s == ' ' || *s == '\t' || *s == '\n')
+			s++;
+		if(*s == 0)
+			break;
+		v = 0;
+		if(*s < '0' || *s > '9')
+			break;
+		while(*s >= '0' && *s <= '9')
+			v = v*10 + *s++ - '0';
+		if(n == 0)
+			*a = v;
+		else if(n == 1)
+			*b = v;
+		else
+			*c = v;
+		n++;
+	}
+	return n;
+}
+
+static long
+sysaccept(void)
+{
+	char line[128], target[128];
+	int n, cpid, wfd, rfd, rf, wf;
+
+	if(listenerfd < 0)
+		return -Ebadf;
+	n = readn(listenerfd, line, sizeof line-1);
+	if(n <= 0)
+		return -Ebadf;
+	line[n] = 0;
+	if(sscanf3(line, &cpid, &wfd, &rfd) != 3)
+		return -Ebadf;
+	snprint(target, sizeof target, "/proc/%d/fd/%d", cpid, rfd);
+	rf = open(target, OREAD);
+	snprint(target, sizeof target, "/proc/%d/fd/%d", cpid, wfd);
+	wf = open(target, OWRITE);
+	if(rf < 0 || wf < 0)
+		return -Ebadf;
+	return (rf<<16) | wf;
+}
+
+static long
+dosocketcall(ulong argsp)
+{
+	ulong *a;
+	long r;
+
+	a = (ulong*)argsp;
+	if(argsp == 0)
+		return -Efault;
+	r = -Enosys;
+	switch(a[0]){
+	case 1:		/* socket: only AF_UNIX streams */
+		r = (a[1] == 1) ? 0 : -Eacces;
+		break;
+	case 2:		/* bind */
+		r = sysbindlisten(a[2]);
+		break;
+	case 3:		/* connect */
+		r = sysconnect(a[2]);
+		break;
+	case 4:		/* listen */
+		r = 0;
+		break;
+	case 5:		/* accept */
+		r = sysaccept();
+		break;
+	case 8:		/* socketpair */
+		{
+			int p[2];
+
+			if(pipe(p) < 0)
+				r = -Enomem;
+			else{
+				((ulong*)a[4])[0] = p[0];
+				((ulong*)a[4])[1] = p[1];
+				r = 0;
+			}
+		}
+		break;
+	case 9:		/* send */
+	case 11:	/* sendto */
+		r = write((int)a[2], (void*)a[3], a[4]);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 10:	/* recv */
+	case 12:	/* recvfrom */
+		r = read((int)a[2], (void*)a[3], a[4]);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 13:	/* shutdown */
+	case 14:	/* setsockopt */
+	case 15:	/* getsockopt */
+		r = 0;
+		break;
+	case 16:	/* sendmsg: first iovec only */
+		{
+			struct Liovec *v;
+
+			v = (struct Liovec*)a[3];
+			r = write((int)a[2], v[0].base, v[0].len);
+			if(r < 0)
+				r = -Ebadf;
+		}
+		break;
+	case 17:	/* recvmsg */
+		{
+			struct Liovec *v;
+
+			v = (struct Liovec*)a[3];
+			r = read((int)a[2], v[0].base, v[0].len);
+			if(r < 0)
+				r = -Ebadf;
+		}
+		break;
+	}
+	return r;
+}
+
+/* Linux dirent64: ino(8) off(8) reclen(2) type(1) pad(5) name */
+static long
+sysgetdents64(int fd, ulong buf, ulong len)
+{
+	Dir *d;
+	int n, i;
+	long total;
+	uchar *out;
+
+	n = dirread(fd, &d);
+	if(n < 0)
+		return -Ebadf;
+	if(n == 0){
+		free(d);
+		return 0;
+	}
+	out = (uchar*)buf;
+	total = 0;
+	for(i = 0; i < n; i++){
+		int dl, rl;
+
+		dl = strlen(d[i].name)+1;
+		rl = (19+dl+7) & ~8+1-1;
+		rl = (19+dl+7) & ~7;
+		if(total+rl > (long)len)
+			break;
+		memset(out, 0, rl);
+		*(vlong*)(out) = d[i].qid.path;
+		*(vlong*)(out+8) = total+rl;
+		*(ushort*)(out+16) = rl;
+		out[18] = (d[i].mode&DMDIR) ? 4 : 8;
+		memmove(out+19, d[i].name, dl);
+		out += rl;
+		total += rl;
+	}
+	free(d);
+	return total;
+}
+
+static long
+dofutex(ulong addr, ulong op, ulong val, ulong utime)
+{
+	switch(op & 127){
+	case 0:		/* WAIT: poll; the waiters re-check shared memory */
+		for(;;){
+			if(*(int*)addr != (int)val)
+				return 0;
+			if(utime != 0)
+				return -110;	/* -ETIMEDOUT */
+			sleep(1);
+		}
+	case 1:		/* WAKE */
+	case 3:		/* REQUEUE */
+	case 4:		/* CMP_REQUEUE */
+	case 5:		/* WAKE_OP */
+		return 0;
+	}
+	return -Enosys;
+}
+
+static int
+countargs(char **a)
+{
+	int n;
+
+	for(n = 0; a != nil && a[n] != nil; n++)
+		;
+	return n+1;	/* argv[0] always present */
+}
+
+/* execve in place: drop the guest image, load the new one; the trap
+ * handler installs the registers. */
+static long
+sysexecve(char *path, char **gargv)
+{
+	int fd, i, j;
+	Ehdr eh;
+	uchar hdr[64];
+
+	if(path == nil || path[0] == 0)
+		return -Efault;
+	fd = open(path, OREAD);
+	if(fd < 0)
+		return -Enoent;
+	if(readat(fd, hdr, sizeof hdr, 0) < 0){
+		close(fd);
+		return -Enoent;
+	}
+	memset(&eh, 0, sizeof eh);
+	memmove(eh.ident, hdr, Elfident);
+	if(eh.ident[EiClass] != Elfclass32 || eh.ident[EiData] != Elfdata2lsb){
+		close(fd);
+		return -Enoexec;
+	}
+	eh.type = le16(hdr+16);
+	eh.machine = le16(hdr+18);
+	eh.entry = le32(hdr+24);
+	eh.phoff = le32(hdr+28);
+	eh.phentsize = le16(hdr+42);
+	eh.phnum = le16(hdr+44);
+	if(eh.machine != Em386 || (eh.type != EtExec && eh.type != EtDyn)){
+		close(fd);
+		return -Enoexec;
+	}
+	for(i = 0; i < nguestsegs; i++)
+		segdetach((void*)guestsegs[i][0]);
+	nguestsegs = 0;
+	nph = 0;
+	nphhdrs = eh.phnum;
+	dynamic = 0;
+	interppath[0] = 0;
+	interpbase = 0;
+	mapbump = Mapbase + Brksize + Pgsz;
+	entrypc = loadelf(fd, &eh, eh.type == EtDyn ? Piebase : 0);
+	mainentry = entrypc;
+	phdrva = eh.phoff;
+	if(eh.type == EtDyn)
+		phdrva += Piebase;
+	close(fd);
+	if(dynamic){
+		int ifd;
+		Ehdr ieh;
+		uchar ihdr[64];
+
+		if(interppath[0] == 0)
+			return -Enoexec;
+		ifd = open(interppath, OREAD);
+		if(ifd < 0)
+			return -Enoent;
+		if(readat(ifd, ihdr, sizeof ihdr, 0) < 0){
+			close(ifd);
+			return -Enoent;
+		}
+		memset(&ieh, 0, sizeof ieh);
+		memmove(ieh.ident, ihdr, Elfident);
+		ieh.type = le16(ihdr+16);
+		ieh.machine = le16(ihdr+18);
+		ieh.entry = le32(ihdr+24);
+		ieh.phoff = le32(ihdr+28);
+		ieh.phentsize = le16(ihdr+42);
+		ieh.phnum = le16(ihdr+44);
+		interpbase = Interpbase;
+		loadelf(ifd, &ieh, interpbase);
+		close(ifd);
+		entrypc = interpbase + ieh.entry;
+	}
+	stacktop = buildstack(countargs(gargv), gargv);
+	return 0;
+}
+
 static long
 dosyscall(Ureg *ur)
 {
-	ulong nr, a1, a2, a3, a4;
+	ulong nr, a1, a2, a3, a4, a5;
 	long r;
 
 	nr = ur->ax;
@@ -618,6 +1007,7 @@ dosyscall(Ureg *ur)
 	a2 = ur->cx;
 	a3 = ur->dx;
 	a4 = ur->si;
+	a5 = ur->di;
 	r = -Enosys;
 	switch(nr){
 	case 1:		/* exit */
@@ -756,7 +1146,6 @@ dosyscall(Ureg *ur)
 	case 174:	/* rt_sigaction */
 	case 175:	/* rt_sigprocmask */
 	case 238:	/* sendfile: not yet */
-	case 240:	/* futex: pretend success; single-threaded guests poll */
 		r = 0;
 		break;
 	case 163:	/* mremap */
@@ -765,7 +1154,6 @@ dosyscall(Ureg *ur)
 	case 192:	/* mmap2 */
 		r = sysmmap(a1, a2, a3, ur->si, ur->di, ur->bp * Pgsz);
 		break;
-	case 196:	/* lstat64 */
 	case 197:	/* fstat64: real mode/size so ld.so accepts the file */
 		r = fillstat64(a2, (int)a1);
 		break;
@@ -805,6 +1193,289 @@ dosyscall(Ureg *ur)
 		break;
 	case 243:	/* set_thread_area */
 		r = syssetthreadarea(a1);
+		break;
+	case 329:	/* epoll_create1: a pipe stands in for the object */
+		{
+			int p[2];
+
+			if(pipe(p) < 0)
+				r = -Enomem;
+			else{
+				close(p[1]);
+				r = p[0];
+			}
+		}
+		break;
+	case 324:	/* epoll_ctl: record (or drop) the registration */
+		{
+			int i, slot;
+
+			if(a4 == 2){	/* DEL */
+				for(i = 0; i < Maxep; i++)
+					if(eptab[i].epfd == (int)a1 && eptab[i].fd == (int)a2)
+						eptab[i].epfd = -1;
+				r = 0;
+				break;
+			}
+			slot = -1;
+			for(i = 0; i < Maxep; i++){
+				if(eptab[i].epfd == (int)a1 && eptab[i].fd == (int)a2){
+					slot = i;
+					break;
+				}
+				if(slot < 0 && eptab[i].epfd == -1)
+					slot = i;
+			}
+			if(slot < 0){
+				r = -Enomem;
+				break;
+			}
+			eptab[slot].epfd = (int)a1;
+			eptab[slot].fd = (int)a2;
+			eptab[slot].events = a4;
+			if(a4 != 0){
+				/* the event struct: events(4) + data(8) */
+				eptab[slot].events = *(ulong*)a4;
+				eptab[slot].data = *(ulong*)((uchar*)a4+4);
+			}
+			r = 0;
+		}
+		break;
+	case 256:	/* epoll_wait: all registered ready */
+		{
+			ulong *ev;
+			int i, maxev, n;
+
+			ev = (ulong*)a2;
+			maxev = (int)a3;
+			n = 0;
+			for(i = 0; i < Maxep && n < maxev; i++){
+				if(eptab[i].epfd != (int)a1)
+					continue;
+				if(ev != nil){
+					ev[n*3] = eptab[i].events & 0xffffffff;
+					ev[n*3+1] = (ulong)eptab[i].data;
+					ev[n*3+2] = 0;
+				}
+				n++;
+			}
+			if(n == 0 && a4 > 0)
+				sleep(a4 > 50 ? 50 : a4);
+			r = n;
+		}
+		break;
+	case 323:	/* eventfd: a pipe pair, counter semantics ignored */
+		{
+			int p[2];
+
+			if(pipe(p) < 0)
+				r = -Enomem;
+			else{
+				close(p[1]);
+				r = p[0];
+			}
+		}
+		break;
+	case 2:		/* fork */
+	case 120:	/* clone: threads share the guest "shared" segments */
+		{
+			int pid;
+
+			pid = rfork(RFPROC|RFFDG|RFNOTEG);
+			if(pid < 0)
+				r = -Enomem;
+			else if(pid == 0){
+				if(ldtfd >= 0){
+					close(ldtfd);
+					ldtfd = -1;
+				}
+				initedtls = 0;
+				listenerfd = -1;
+				if(nr == 120 && (a1 & LcVmnul) && a2 != 0)
+					ur->sp = a2;
+				ur->ax = 0;
+				return 0;
+			}else{
+				r = pid;
+				if(nr == 120 && (a1 & LcVmnul) && a5 != 0)
+					*(ulong*)a5 = pid;
+			}
+		}
+		break;
+	case 11:	/* execve */
+		{
+			char *gargv[256];
+			ulong *ap;
+			int na;
+
+			ap = (ulong*)a2;
+			for(na = 0; na < 255 && ap != nil && ap[na] != 0; na++)
+				gargv[na] = (char*)ap[na];
+			gargv[na] = nil;
+			r = sysexecve((char*)a1, gargv);
+			if(r == 0){
+				ur->pc = entrypc;
+				ur->sp = stacktop;
+				ur->ax = 0;
+				ur->bx = 0;
+				ur->cx = 0;
+				ur->dx = 0;
+				ur->si = 0;
+				ur->di = 0;
+				ur->bp = 0;
+				return 0;
+			}
+		}
+		break;
+	case 102:	/* socketcall */
+		r = dosocketcall(a1);
+		break;
+	case 220:	/* getdents64 */
+		r = sysgetdents64((int)a1, a2, a3);
+		break;
+	case 168:	/* poll: everything readable; reads block as needed */
+		if(a3 != 0 && (long)a3 > 0)
+			sleep(a3 > 50 ? 50 : a3);
+		if(a1 != 0){
+			struct Lpollfd { int fd, events, revents; } *pf;
+			long k;
+
+			pf = (struct Lpollfd*)a1;
+			for(k = 0; k < (long)a2; k++)
+				pf[k].revents = pf[k].events;
+		}
+		r = a2;
+		break;
+	case 142:	/* select: read-set ready, write-set ready, none except */
+		{
+			ulong *rd, *wr, *ex;
+			int maxfd, k, nready;
+
+			maxfd = (int)a1;
+			rd = (ulong*)a2;
+			wr = (ulong*)a3;
+			ex = (ulong*)a4;
+			nready = 0;
+			for(k = 0; k < maxfd; k++){
+				if(rd != nil && k/32 < 32 && (rd[k/32]>>(k%32)) & 1)
+					nready++;
+			}
+			if(rd != nil && maxfd > 0 && maxfd <= 1024){
+				for(k = 0; k*32 < maxfd && k < 32; k++)
+					if(k == maxfd/32+1 || maxfd >= 32)
+						rd[k] &= (1UL<<(maxfd%32))-1;
+			}
+			USED(wr); USED(ex);
+			r = nready;
+			/* a timeout of 0 polls; otherwise sleep briefly so the
+			 * server loop does not spin */
+			if(a5 != 0 && ((ulong*)a5)[0] == 0 && ((ulong*)a5)[1] == 0)
+				;
+			else
+				sleep(1);
+		}
+		break;
+	case 42:	/* pipe */
+	case 331:	/* pipe2 */
+		if(pipe((int*)a1) < 0)
+			r = -Enomem;
+		else
+			r = 0;
+		break;
+	case 85:	/* readlink */
+		r = -Enoent;
+		break;
+	case 195:	/* stat64 */
+	case 196:	/* lstat64 */
+		{
+			int sfd;
+
+			sfd = open((char*)a1, OREAD);
+			if(sfd < 0)
+				r = -Enoent;
+			else{
+				r = fillstat64(a2, sfd);
+				close(sfd);
+			}
+		}
+		break;
+	case 9:		/* link: exclusive-create a copy (lock files) */
+		{
+			int ifd, ofd;
+			char buf[4096];
+			long n;
+
+			if(access((char*)a2, AEXIST) >= 0){
+				r = -17;	/* -EEXIST */
+				break;
+			}
+			ifd = open((char*)a1, OREAD);
+			if(ifd < 0){
+				r = -Enoent;
+				break;
+			}
+			ofd = create((char*)a2, OWRITE|OEXCL, 0644);
+			if(ofd < 0){
+				close(ifd);
+				r = -Eacces;
+				break;
+			}
+			while((n = read(ifd, buf, sizeof buf)) > 0)
+				write(ofd, buf, n);
+			close(ifd);
+			close(ofd);
+			r = 0;
+		}
+		break;
+	case 87:	/* unlink */
+		r = remove((char*)a1) < 0 ? -Enoent : 0;
+		break;
+	case 39:	/* mkdir */
+		if(create((char*)a1, OREAD, DMDIR|0777) < 0)
+			r = -Eacces;
+		else
+			r = 0;
+		break;
+	case 240:	/* futex */
+		r = dofutex(a1, a2, a3, a4);
+		break;
+	case 162:	/* nanosleep */
+		{
+			ulong ms;
+
+			ms = 1;
+			if(a1 != 0)
+				ms = ((ulong*)a1)[0]*1000 + (((ulong*)a1)[1])/1000000;
+			sleep(ms ? ms : 1);
+		}
+		r = 0;
+		break;
+	case 55:	/* fcntl */
+		switch(a2){
+		case 0:	/* F_DUPFD */
+			r = dup((int)a1, -1);
+			if(r < 0)
+				r = -Ebadf;
+			break;
+		case 3:	/* GETFL */
+			r = 2;
+			break;
+		default:
+			r = 0;
+		}
+		break;
+	case 66:	/* setsid */
+		r = 0;
+		break;
+	case 61:	/* getppid */
+		r = 1;
+		break;
+	case 30:	/* umask */
+	case 15:	/* chmod */
+	case 16:	/* lchown */
+	case 212:	/* chown32 */
+	case 94:	/* setgroups */
+		r = 0;
 		break;
 	}
 	if(verbose)

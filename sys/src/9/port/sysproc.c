@@ -98,6 +98,18 @@ sysrfork(ulong *arg)
 	p->nnote = up->nnote;
 	p->notified = 0;
 	p->lastnote = up->lastnote;
+	/* the child needs its own LDT page: the foreign TLS entries are
+	 * per-process state, not memory to share (devldt) */
+	if(p->ldtbase != 0){
+		ulong ldt;
+
+		ldt = (ulong)malloc(BY2PG);
+		if(ldt != 0){
+			memmove((void*)ldt, (void*)p->ldtbase, BY2PG);
+			p->ldtbase = ldt;
+		}else
+			p->ldtbase = 0;
+	}
 	p->notify = up->notify;
 	p->ureg = up->ureg;
 	p->dbgreg = 0;
