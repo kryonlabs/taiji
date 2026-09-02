@@ -316,7 +316,7 @@ buildstack(int nargs, char **args)
 	vec[i++] = 32; vec[i++] = sysinfova;
 	vec[i++] = 25; vec[i++] = randva;
 	vec[i++] = 31; vec[i++] = execfnva;
-	vec[i++] = 33; vec[i++] = platformva;
+	vec[i++] = 15; vec[i++] = platformva;
 	vec[i++] = 0; vec[i++] = 0;
 	return sp;
 }
@@ -551,6 +551,21 @@ dosyscall(Ureg *ur)
 		break;
 	case 5:		/* open */
 		r = sysopen(a1, a2, ur->si);
+		break;
+	case 295:	/* openat: only the AT_FDCWD form */
+		if(a1 != 0xffffff9cUL)
+			r = -Ebadf;
+		else
+			r = sysopen(a2, a3, ur->si);
+		break;
+	case 300:	/* fstatat64: zeroed like fstat64 */
+		if(a1 != 0xffffff9cUL)
+			r = -Ebadf;
+		else{
+			if(a3 != 0)
+				memset((void*)a3, 0, 96);
+			r = 0;
+		}
 		break;
 	case 6:		/* close */
 		close((int)a1);

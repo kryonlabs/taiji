@@ -147,6 +147,17 @@ if(! ~ `{linuxrun test/tls.elf} ABCDET){
 	echo taiji-linuxrun-tls-failed
 	fshalt
 }
+# ... and the real thing: a Debian-archive glibc binary end to end
+if(! ~ `{linuxrun test/busybox.elf echo taiji-busybox-ok} taiji-busybox-ok){
+	echo taiji-linuxrun-busybox-failed
+	fshalt
+}
+echo taiji-linuxrun-cat-ok >/tmp/linuxrun-cat
+if(! ~ `{linuxrun test/busybox.elf cat /tmp/linuxrun-cat} taiji-linuxrun-cat-ok){
+	echo taiji-linuxrun-cat-failed
+	fshalt
+}
+rm -f /tmp/linuxrun-cat
 echo taiji-linuxrun-smoke-ok
 fshalt
 EOF
