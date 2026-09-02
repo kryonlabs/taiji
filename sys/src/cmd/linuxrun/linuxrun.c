@@ -99,6 +99,8 @@ char exitstr[16];
 int ldtfd = -1;
 ulong phdrva;
 ulong randva;
+ulong sysinfova;
+int phdrmode;	/* 0: phdr array, 1: ehdr, 2: omit */
 ulong execfnva;
 ulong platformva;
 int nphhdrs;
@@ -283,8 +285,8 @@ buildstack(int nargs, char **args)
 		st[randva - Stackbase + i] = nsec() >> (i*3);
 
 	/* PHDR PAGESZ PHNUM BASE ENTRY CLKTCK PHENT FLAGS UID EUID
-	 * GID EGID HWCAP SECURE RANDOM EXECFN PLATFORM NULL */
-	naux = 18;
+	 * GID EGID HWCAP SECURE SYSINFO RANDOM EXECFN PLATFORM NULL */
+	naux = 19;
 	nvec = 1 + nargs + 1 + 1 + 2*naux;
 	sp = (randva - 16) & ~15UL;
 	sp = (sp - nvec*4) & ~15UL;
@@ -295,9 +297,11 @@ buildstack(int nargs, char **args)
 	vec[1+nargs] = 0;
 	vec[2+nargs] = 0;
 	i = 3+nargs;
-	vec[i++] = 3; vec[i++] = phdrva;
+	if(phdrmode != 2){
+		vec[i++] = 3; vec[i++] = phdrva;
+		vec[i++] = 5; vec[i++] = nphhdrs;
+	}
 	vec[i++] = 6; vec[i++] = Pgsz;
-	vec[i++] = 5; vec[i++] = nphhdrs;
 	vec[i++] = 7; vec[i++] = 0;
 	vec[i++] = 9; vec[i++] = entrypc;
 	vec[i++] = 17; vec[i++] = 100;
@@ -309,6 +313,7 @@ buildstack(int nargs, char **args)
 	vec[i++] = 14; vec[i++] = 0;
 	vec[i++] = 16; vec[i++] = 0;
 	vec[i++] = 23; vec[i++] = 0;
+	vec[i++] = 32; vec[i++] = sysinfova;
 	vec[i++] = 25; vec[i++] = randva;
 	vec[i++] = 31; vec[i++] = execfnva;
 	vec[i++] = 33; vec[i++] = platformva;
@@ -414,7 +419,22 @@ sysopen(ulong path, ulong flags, ulong mode)
 	return fd;
 }
 
-static ulong mapbump = Mapbase + Brksize;
+static ulong mapbump = Mapbase + Brksize + Pgsz;
+
+/* glibc's i386 syscall stub calls through the TCB sysinfo pointer
+ * (AT_SYSINFO) rather than int $0x80 for some syscalls; give it a
+ * ud2;ret trampoline so those funnel into the same emulator. */
+static void
+initsysinfo(void)
+{
+	uchar *p;
+
+	p = (uchar*)(Mapbase + Brksize);
+	p[0] = 0x0f;
+	p[1] = 0x0b;
+	p[2] = 0xc3;
+	sysinfova = (ulong)p;
+}
 
 static long
 sysmmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong off)
@@ -695,8 +715,22 @@ traphandler(void *v, char *msg)
 	if(v == nil)
 		return 0;
 	ur = v;
-	if(ur->trap != TrapUD)
+	if(ur->trap != TrapUD){
+		/* dump guest faults so the caller of a bad call is visible */
+		if(started){
+			ulong *stk;
+			int i;
+
+			fprint(2, "linuxrun: guest fault trap=%lux pc=%lux sp=%lux\n",
+				ur->trap, ur->pc, ur->sp);
+			fprint(2, "linuxrun: ax=%lux bx=%lux cx=%lux dx=%lux si=%lux di=%lux bp=%lux\n",
+				ur->ax, ur->bx, ur->cx, ur->dx, ur->si, ur->di, ur->bp);
+			stk = (ulong*)ur->sp;
+			for(i = 0; i < 12; i++)
+				fprint(2, "linuxrun:  sp+%d = %lux\n", i*4, stk[i]);
+		}
 		return 0;
+	}
 	pc = (uchar*)ur->pc;
 	if(pc[0] != 0x0f || pc[1] != 0x0b)
 		return 0;
@@ -752,6 +786,12 @@ main(int argc, char *argv[])
 	case 'v':
 		verbose = 1;
 		break;
+	case 'p':
+		phdrmode = 1;
+		break;
+	case 'P':
+		phdrmode = 2;
+		break;
 	default:
 		usage();
 	}ARGEND
@@ -793,6 +833,16 @@ main(int argc, char *argv[])
 	close(fd);
 	/* the phdrs live in the first PT_LOAD; translate the file offset */
 	phdrva = 0;
+	if(phdrmode == 1){
+		for(i = 0; i < nph; i++){
+			if(ph[i].type == PtLoad && ph[i].memsz > 0){
+				phdrva = ph[i].vaddr & ~(Pgsz-1);
+				break;
+			}
+		}
+		if(verbose)
+			fprint(2, "linuxrun: phdr(mode ehdr) %#lux\n", phdrva);
+	}
 	for(i = 0; i < nph; i++){
 		if(ph[i].type == PtLoad && ph[i].memsz > 0){
 			if(eh.phoff >= ph[i].offset &&
@@ -806,6 +856,7 @@ main(int argc, char *argv[])
 
 	brkcur = Brkbase;
 	segat(Mapbase, Mapsize);
+	initsysinfo();
 
 	stacktop = buildstack(argc, argv);
 	if(verbose)
