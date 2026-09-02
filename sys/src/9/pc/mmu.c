@@ -293,6 +293,32 @@ taskswitch(ulong pdb, ulong stack)
 }
 
 void
+/* Install (or drop) the process LDT descriptor on this processor.
+ * Callers: mmuswitch on switch-in, devldt after entry writes. */
+void
+ldtload(Proc *proc)
+{
+	Segdesc *tab;
+	int i;
+
+	/* Foreign thread storage: the process' descriptors live in the
+	 * ldtbase page (entry i of the page is GDT slot TLSSEG+i, and
+	 * also LDT entry i).  The LDT path is kept for hardware that
+	 * honours it; under QEMU the GDT slots are what work, which is
+	 * how Linux does i386 TLS anyway. */
+	if(proc->ldtbase == 0){
+		lldt(0);
+		return;
+	}
+	tab = (Segdesc*)proc->ldtbase;
+	for(i = 0; i < NTLS; i++)
+		m->gdt[TLSSEG+i] = tab[i];
+	m->gdt[LDTSEG].d0 = ((ulong)tab<<16)|(BY2PG-1);
+	m->gdt[LDTSEG].d1 = ((ulong)tab&0xFF000000)|(((ulong)tab>>16)&0xFF)|SEGLDT|SEGPL(0)|SEGP;
+	lldt(LDTSEL);
+}
+
+void
 mmuswitch(Proc* proc)
 {
 	ulong *pdb;
@@ -309,6 +335,8 @@ mmuswitch(Proc* proc)
 		taskswitch(proc->mmupdb->pa, (ulong)(proc->kstack+KSTACK));
 	}else
 		taskswitch(PADDR(m->pdb), (ulong)(proc->kstack+KSTACK));
+
+	ldtload(proc);
 }
 
 /*

@@ -96,6 +96,12 @@ Phdr ph[Maxph];
 int nph;
 ulong brkcur;
 char exitstr[16];
+int ldtfd = -1;
+ulong phdrva;
+ulong randva;
+ulong execfnva;
+ulong platformva;
+int nphhdrs;
 
 static void
 fatal(char *fmt, ...)
@@ -249,31 +255,64 @@ loadelf(int fd, Ehdr *eh)
  * argc/argv/envp/auxv below it, stack pointer 16-byte aligned.
  */
 static ulong
-buildstack(char *argv0)
+buildstack(int nargs, char **args)
 {
 	uchar *st;
 	ulong sp, strp;
 	ulong *vec;
-	int naux, nvec;
+	ulong argv[16];
+	int i, naux, nvec;
 
+	if(nargs > 15)
+		nargs = 15;
 	st = segat(Stackbase, Stacksize);
-	strp = Stackbase + Stacksize - 64;
-	strcpy((char*)st + (strp - Stackbase), argv0);
+	strp = Stackbase + Stacksize - 512;
+	for(i = nargs-1; i >= 0; i--){
+		int l;
 
-	naux = 4;	/* PAGESZ, ENTRY, UID, GID pairs */
-	nvec = 1 + 1 + 1 + 1 + 2*naux + 1;
-	sp = (strp - 16) & ~15UL;
+		l = strlen(args[i]) + 1;
+		strp -= l;
+		strcpy((char*)st + (strp - Stackbase), args[i]);
+		argv[i] = strp;
+	}
+	execfnva = argv[0];
+	platformva = strp - 8;
+	strcpy((char*)st + (platformva - Stackbase), "i686");
+	randva = platformva - 32;
+	for(i = 0; i < 16; i++)
+		st[randva - Stackbase + i] = nsec() >> (i*3);
+
+	/* PHDR PAGESZ PHNUM BASE ENTRY CLKTCK PHENT FLAGS UID EUID
+	 * GID EGID HWCAP SECURE RANDOM EXECFN PLATFORM NULL */
+	naux = 18;
+	nvec = 1 + nargs + 1 + 1 + 2*naux;
+	sp = (randva - 16) & ~15UL;
 	sp = (sp - nvec*4) & ~15UL;
 	vec = (ulong*)(st + (sp - Stackbase));
-	vec[0] = 1;			/* argc */
-	vec[1] = strp;			/* argv[0] */
-	vec[2] = 0;			/* argv end */
-	vec[3] = 0;			/* envp end */
-	vec[4] = 6; vec[5] = Pgsz;	/* AT_PAGESZ */
-	vec[6] = 9; vec[7] = entrypc;	/* AT_ENTRY */
-	vec[8] = 11; vec[9] = 0;	/* AT_UID */
-	vec[10] = 13; vec[11] = 0;	/* AT_GID */
-	vec[12] = 0; vec[13] = 0;	/* AT_NULL */
+	vec[0] = nargs;
+	for(i = 0; i < nargs; i++)
+		vec[1+i] = argv[i];
+	vec[1+nargs] = 0;
+	vec[2+nargs] = 0;
+	i = 3+nargs;
+	vec[i++] = 3; vec[i++] = phdrva;
+	vec[i++] = 6; vec[i++] = Pgsz;
+	vec[i++] = 5; vec[i++] = nphhdrs;
+	vec[i++] = 7; vec[i++] = 0;
+	vec[i++] = 9; vec[i++] = entrypc;
+	vec[i++] = 17; vec[i++] = 100;
+	vec[i++] = 4; vec[i++] = 32;
+	vec[i++] = 8; vec[i++] = 0;
+	vec[i++] = 11; vec[i++] = 0;
+	vec[i++] = 12; vec[i++] = 0;
+	vec[i++] = 13; vec[i++] = 0;
+	vec[i++] = 14; vec[i++] = 0;
+	vec[i++] = 16; vec[i++] = 0;
+	vec[i++] = 23; vec[i++] = 0;
+	vec[i++] = 25; vec[i++] = randva;
+	vec[i++] = 31; vec[i++] = execfnva;
+	vec[i++] = 33; vec[i++] = platformva;
+	vec[i++] = 0; vec[i++] = 0;
 	return sp;
 }
 
@@ -398,6 +437,71 @@ sysmmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong off)
 	return va;
 }
 
+/* Linux i386 struct user_desc */
+typedef struct Userdesc Userdesc;
+struct Userdesc {
+	int entry_number;
+	ulong base_addr;
+	int limit;
+	int flags;
+};
+
+#define UDSeg32 (1<<0)
+#define UDLimpages (1<<4)
+
+/*
+ * set_thread_area: install the TLS descriptor in the process' foreign
+ * descriptor page (entry 0 of the page = GDT slot TLSSEG, which is
+ * selector 0x33 = entry_number 6 - exactly how Linux numbers i386
+ * TLS).  glibc loads %gs itself once the entry exists.
+ */
+static long
+syssetthreadarea(ulong udesc)
+{
+	Userdesc *ud;
+	ulong d0, d1, base;
+	int fd;
+	static uchar desc[8];
+	static int inited;
+
+	if(udesc == 0)
+		return -Efault;
+	ud = (Userdesc*)udesc;
+	base = ud->base_addr;
+	d0 = (base & 0xFFFF)<<16 | 0xFFFF;
+	d1 = (base & 0xFF000000) | ((base>>16) & 0xFF);
+	d1 |= 0x8000;		/* present */
+	d1 |= 3<<13;		/* DPL 3 */
+	d1 |= 0x12<<8;		/* data, writable */
+	d1 |= 1<<23;		/* granularity 4k */
+	d1 |= 1<<22;		/* 32-bit */
+	desc[0] = d0 & 0xFF;
+	desc[1] = (d0>>8) & 0xFF;
+	desc[2] = (d0>>16) & 0xFF;
+	desc[3] = (d0>>24) & 0xFF;
+	desc[4] = d1 & 0xFF;
+	desc[5] = (d1>>8) & 0xFF;
+	desc[6] = (d1>>16) & 0xFF;
+	desc[7] = (d1>>24) & 0xFF;
+	if(!inited){
+		inited = 1;
+		ldtfd = open("/dev/ldt", OWRITE);
+		if(ldtfd < 0){
+			/* the device is not in the default namespace */
+			if(bind("#z", "/dev", MAFTER) >= 0)
+				ldtfd = open("/dev/ldt", OWRITE);
+		}
+	}
+	if(ldtfd < 0)
+		return -Enosys;
+	if(seek(ldtfd, 0, 0) < 0)
+		return -Enosys;
+	if(write(ldtfd, desc, 8) != 8)
+		return -Enosys;
+	ud->entry_number = 6;
+	return 0;
+}
+
 static long
 dosyscall(Ureg *ur)
 {
@@ -497,10 +601,37 @@ dosyscall(Ureg *ur)
 	case 146:	/* writev */
 		r = syswritev(a1, a2, a3);
 		break;
+	case 76:	/* getrlimit */
+	case 191:	/* ugetrlimit: fill in an infinite rlimit */
+		if(a2 != 0){
+			*(ulong*)a2 = 0x7fffffff;
+			*(ulong*)(a2+4) = 0x7fffffff;
+		}
+		r = 0;
+		break;
+	case 78:	/* gettimeofday */
+		{
+			vlong t;
+
+			t = nsec();
+			if(a1 != 0){
+				*(ulong*)a1 = t/1000000000;
+				*(ulong*)(a1+4) = (t/1000)%1000000;
+			}
+		}
+		r = 0;
+		break;
+	case 125:	/* mprotect */
+	case 219:	/* madvise */
+	case 172:	/* prctl */
 	case 174:	/* rt_sigaction */
 	case 175:	/* rt_sigprocmask */
-	case 238:	/* futex: pretend success; TLS-less programs poll */
+	case 238:	/* sendfile: not yet */
+	case 240:	/* futex: pretend success; single-threaded guests poll */
 		r = 0;
+		break;
+	case 163:	/* mremap */
+		r = -Enomem;
 		break;
 	case 192:	/* mmap2 */
 		r = sysmmap(a1, a2, a3, ur->si, ur->di, ur->bp * Pgsz);
@@ -511,11 +642,43 @@ dosyscall(Ureg *ur)
 			memset((void*)a2, 0, 96);
 		r = 0;
 		break;
+	case 258:	/* set_tid_address */
+		r = getpid();
+		break;
+	case 265:	/* clock_gettime */
+		{
+			vlong t;
+
+			t = nsec();
+			if(a2 != 0){
+				*(ulong*)a2 = t/1000000000;
+				*(ulong*)(a2+4) = t%1000000000;
+			}
+		}
+		r = 0;
+		break;
+	case 355:	/* getrandom */
+		{
+			ulong i, x;
+
+			x = nsec();
+			for(i = 0; i < a2; i++){
+				x = x*1103515245 + 12345;
+				((uchar*)a1)[i] = (x>>16) & 0xFF;
+			}
+		}
+		r = a2;
+		break;
+	case 243:	/* set_thread_area */
+		r = syssetthreadarea(a1);
+		break;
 	}
 	if(verbose)
 		fprint(2, "linuxrun: sys %lux -> %ld\n", nr, r);
 	return r;
 }
+
+
 
 /*
  * The first ud2 trap starts the program (install entry registers);
@@ -580,7 +743,7 @@ main(int argc, char *argv[])
 {
 	Ehdr eh;
 	uchar hdr[64];
-	int fd;
+	int fd, i;
 
 	ARGBEGIN{
 	case 'n':
@@ -625,13 +788,26 @@ main(int argc, char *argv[])
 	}
 
 	entrypc = eh.entry;
+	nphhdrs = eh.phnum;
 	loadelf(fd, &eh);
 	close(fd);
+	/* the phdrs live in the first PT_LOAD; translate the file offset */
+	phdrva = 0;
+	for(i = 0; i < nph; i++){
+		if(ph[i].type == PtLoad && ph[i].memsz > 0){
+			if(eh.phoff >= ph[i].offset &&
+			    eh.phoff < ph[i].offset + ph[i].filesz)
+				phdrva = ph[i].vaddr + (eh.phoff - ph[i].offset);
+			break;
+		}
+	}
+	if(verbose)
+		fprint(2, "linuxrun: phdr %#lux\n", phdrva);
 
 	brkcur = Brkbase;
 	segat(Mapbase, Mapsize);
 
-	stacktop = buildstack(argv[0]);
+	stacktop = buildstack(argc, argv);
 	if(verbose)
 		fprint(2, "linuxrun: entry %#lux stack %#lux\n", entrypc, stacktop);
 

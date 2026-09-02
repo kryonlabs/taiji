@@ -94,6 +94,12 @@ void	kbdenable(void);
 void	kbdinit(void);
 #define	kmapinval()
 void	lgdt(ushort[3]);
+void	lldt(ulong);
+ulong	sldt(void);
+void	sgdt(void*);
+void	kloadgs(ulong);
+ulong	kreadgs(ulong);
+void	ldtload(Proc*);
 void	lidt(ushort[3]);
 void	links(void);
 void	ltr(ulong);

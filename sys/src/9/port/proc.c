@@ -1113,6 +1113,7 @@ pexit(char *exitstr, int freemem)
 	Rgrp *rgrp;
 	Pgrp *pgrp;
 	Chan *dot;
+	ulong ldt;
 	void (*pt)(Proc*, int, vlong);
 
 	if(up->syscalltrace)
@@ -1136,6 +1137,8 @@ pexit(char *exitstr, int freemem)
 	up->pgrp = nil;
 	dot = up->dot;
 	up->dot = nil;
+	ldt = up->ldtbase;
+	up->ldtbase = 0;
 	qunlock(&up->debug);
 
 	if(fgrp)
@@ -1146,6 +1149,8 @@ pexit(char *exitstr, int freemem)
 		closergrp(rgrp);
 	if(dot)
 		cclose(dot);
+	if(ldt)
+		free((void*)ldt);
 	if(pgrp)
 		closepgrp(pgrp);
 

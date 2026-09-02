@@ -868,6 +868,27 @@ if(0) print("%s %lud: notify %.8lux %.8lux %.8lux %s\n",
 /*
  *   Return user to state before notify()
  */
+/* is s a foreign thread-storage selector for this process - either an
+ * LDT selector or one of the TLS GDT slots - with a present entry? */
+static int
+ldtok(ulong s)
+{
+	ulong *tab;
+	int idx;
+
+	if(up->ldtbase == 0 || (s & 3) != 3)
+		return 0;
+	idx = (s>>3) & 0x1FFF;
+	if((s & 4) == 0)
+		return idx >= TLSSEG && idx < TLSSEG+NTLS;
+	if(idx >= BY2PG/8)
+		return 0;
+	tab = (ulong*)up->ldtbase;
+	if((tab[idx*2+1] & SEGP) == 0)
+		return 0;
+	return 1;
+}
+
 void
 noted(Ureg* ureg, ulong arg0)
 {
@@ -902,10 +923,13 @@ noted(Ureg* ureg, ulong arg0)
 	 * user process.
 	 * Take care with the comparisons as different processor
 	 * generations push segment descriptors in different ways.
+	 * fs/gs may also hold a user LDT selector: foreign runtimes
+	 * (see devldt) install thread-local storage there.
 	 */
 	if((nureg->cs & 0xFFFF) != UESEL || (nureg->ss & 0xFFFF) != UDSEL
 	  || (nureg->ds & 0xFFFF) != UDSEL || (nureg->es & 0xFFFF) != UDSEL
-	  || (nureg->fs & 0xFFFF) != UDSEL || (nureg->gs & 0xFFFF) != UDSEL){
+	  || ((nureg->fs & 0xFFFF) != UDSEL && !ldtok(nureg->fs & 0xFFFF))
+	  || ((nureg->gs & 0xFFFF) != UDSEL && !ldtok(nureg->gs & 0xFFFF))){
 		qunlock(&up->debug);
 		pprint("bad segment selector in noted\n");
 		pexit("Suicide", 0);

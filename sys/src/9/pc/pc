@@ -18,6 +18,7 @@ dev
 	kprof
 	fs
 	segment
+	ldt
 
 	ether		netif
 	ip		arp chandial ip ipv6 ipaux iproute netlog nullmedium pktmedium ptclbsum386 inferno

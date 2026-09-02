@@ -614,6 +614,39 @@ TEXT ltr(SB), $0				/* TR - task register */
 	MOVW	AX, TASK
 	RET
 
+TEXT lldt(SB), $0				/* LDTR - local descriptor table */
+	MOVL	sel+0(FP), AX
+	BYTE $0x0F
+	BYTE $0x00
+	BYTE $0xD0	/* LLDT AX */
+	RET
+
+TEXT sldt(SB), $0				/* store LDTR selector */
+	BYTE $0x0F
+	BYTE $0x00
+	BYTE $0xC0	/* SLDT AX */
+	RET
+
+TEXT sgdt(SB), $0				/* store GDTR to ptr */
+	MOVL	p+0(FP), AX
+	BYTE $0x0F
+	BYTE $0x01
+	BYTE $0x00	/* SGDT (AX) */
+	RET
+
+TEXT kloadgs(SB), $0				/* load %gs (kernel probe) */
+	MOVL	sel+0(FP), AX
+	BYTE $0x8E
+	BYTE $0xE8	/* MOV AX -> GS */
+	RET
+
+TEXT kreadgs(SB), $0				/* read %gs:off */
+	MOVL	off+0(FP), AX
+	BYTE $0x65	/* GS prefix */
+	BYTE $0x8B
+	BYTE $0x00	/* MOV 0(AX), AX */
+	RET
+
 TEXT getcr0(SB), $0				/* CR0 - processor control */
 	MOVL	CR0, AX
 	RET

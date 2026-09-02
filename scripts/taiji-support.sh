@@ -142,6 +142,11 @@ if(! ~ `{linuxrun test/file.elf} taiji-linuxrun-data-ok){
 	fshalt
 }
 rm -f /tmp/linuxrun-data
+# ... and use real thread-local storage (set_thread_area + %gs)
+if(! ~ `{linuxrun test/tls.elf} ABCDET){
+	echo taiji-linuxrun-tls-failed
+	fshalt
+}
 echo taiji-linuxrun-smoke-ok
 fshalt
 EOF
