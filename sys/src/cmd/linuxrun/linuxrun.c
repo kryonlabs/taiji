@@ -1430,6 +1430,27 @@ dosyscall(Ureg *ur)
 	case 87:	/* unlink */
 		r = remove((char*)a1) < 0 ? -Enoent : 0;
 		break;
+	case 41:	/* dup */
+		r = dup((int)a1, -1);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 63:	/* dup2 */
+		if(a2 == a1){
+			r = a1;
+			break;
+		}
+		close((int)a2);
+		r = dup((int)a1, (int)a2);
+		if(r < 0)
+			r = -Ebadf;
+		break;
+	case 332:	/* dup3: flags ignored */
+		close((int)a2);
+		r = dup((int)a1, (int)a2);
+		if(r < 0)
+			r = -Ebadf;
+		break;
 	case 39:	/* mkdir */
 		if(create((char*)a1, OREAD, DMDIR|0777) < 0)
 			r = -Eacces;
