@@ -105,6 +105,11 @@ int nph;
 ulong brkcur;
 char exitstr[16];
 int ldtfd = -1;
+/* the guest's %fs must not stay the plan9 flat data selector (base 0):
+ * fs-relative accesses would hit low linear memory - this loader's own
+ * text.  Point it at the TLS entry like %gs. */
+ulong tlsselector = 0x33;
+int tlsfsokay;
 int initedtls;
 
 ulong guestsegs[16][2];
@@ -653,6 +658,7 @@ syssetthreadarea(ulong udesc)
 		return -Enosys;
 	}
 	ud->entry_number = 6;
+	tlsfsokay = 1;
 	return 0;
 }
 
@@ -796,6 +802,7 @@ static long
 dosocketcall(ulong argsp)
 {
 	ulong *a;
+
 	long r;
 
 	a = (ulong*)argsp;
@@ -1322,7 +1329,7 @@ dosyscall(Ureg *ur)
 			int pid;
 
 			pid = rfork(RFPROC|RFFDG|RFNOTEG);
-			if(pid < 0)
+					if(pid < 0)
 				r = -Enomem;
 			else if(pid == 0){
 				if(ldtfd >= 0){
@@ -1652,6 +1659,8 @@ traphandler(void *v, char *msg)
 	}
 	ur->ax = dosyscall(ur);
 	ur->pc += 2;
+	if(tlsfsokay)
+		ur->fs = tlsselector;
 	return 1;
 }
 
