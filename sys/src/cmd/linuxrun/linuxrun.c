@@ -182,7 +182,7 @@ static void initsysinfo(void);
 static long syssetthreadarea(ulong);
 static long sysexecve(char*, char**);
 static int countargs(char**);
-static long dosocketcall(ulong);
+static long dosocketcall(ulong, ulong);
 static long sysgetdents64(int, ulong, ulong);
 static long dofutex(ulong, ulong, ulong, ulong);
 
@@ -831,68 +831,69 @@ sysaccept(void)
 }
 
 static long
-dosocketcall(ulong argsp)
+dosocketcall(ulong subop, ulong argsp)
 {
+	/* i386 socketcall convention: ebx is the operation, ecx points
+	 * at that operation's argument array.  Passing them crossed
+	 * made the handler read address 1 (SOCKOP_socket) as the array
+	 * and die as a nested note. */
 	ulong *a;
-
 	long r;
 
-	a = (ulong*)argsp;
-	if(argsp == 0)
+	if(argsp == 0 || argsp > 0xffff0000UL)
 		return -Efault;
+	a = (ulong*)argsp;
 	r = -Enosys;
-	switch(a[0]){
-	case 1:		/* socket: only AF_UNIX streams */
-		r = (a[1] == 1) ? 0 : -Eacces;
+	switch(subop){
+	case 1:		/* socket(a0=domain,a1=type,a2=proto): AF_UNIX only */
+		r = (a[0] == 1) ? 0 : -Eacces;
 		break;
-	case 2:		/* bind */
-		r = sysbindlisten(a[2]);
+	case 2:		/* bind(fd,a1=addr,a2=len) */
+		r = sysbindlisten(a[1]);
 		break;
-	case 3:		/* connect */
-		r = sysconnect(a[2]);
+	case 3:		/* connect(fd,a1=addr,a2=len) */
+		r = sysconnect(a[1]);
 		break;
 	case 4:		/* listen */
+	case 13:	/* shutdown */
+	case 14:	/* setsockopt */
+	case 15:	/* getsockopt */
 		r = 0;
 		break;
 	case 5:		/* accept */
 		r = sysaccept();
 		break;
-	case 8:		/* socketpair */
+	case 8:		/* socketpair: two pipes is close enough */
 		{
 			int p[2];
 
 			if(pipe(p) < 0)
 				r = -Enomem;
 			else{
-				((ulong*)a[4])[0] = p[0];
-				((ulong*)a[4])[1] = p[1];
+				((ulong*)a[3])[0] = p[0];
+				((ulong*)a[3])[1] = p[1];
 				r = 0;
 			}
 		}
 		break;
-	case 9:		/* send */
-	case 11:	/* sendto */
-		r = write((int)a[2], (void*)a[3], a[4]);
+	case 9:		/* send(fd,a1=buf,a2=len) */
+	case 11:	/* sendto(fd,a1,a2,a3,a4) */
+		r = write((int)a[0], (void*)a[1], a[2]);
 		if(r < 0)
 			r = -Ebadf;
 		break;
-	case 10:	/* recv */
-	case 12:	/* recvfrom */
-		r = read((int)a[2], (void*)a[3], a[4]);
+	case 10:	/* recv(fd,a1=buf,a2=len) */
+	case 12:	/* recvfrom(fd,a1,a2,a3,a4) */
+		r = read((int)a[0], (void*)a[1], a[2]);
 		if(r < 0)
 			r = -Ebadf;
-		break;
-	case 13:	/* shutdown */
-	case 14:	/* setsockopt */
-	case 15:	/* getsockopt */
-		r = 0;
 		break;
 	case 16:	/* sendmsg: first iovec only */
 		{
 			struct Liovec *v;
 
-			v = (struct Liovec*)a[3];
-			r = write((int)a[2], v[0].base, v[0].len);
+			v = (struct Liovec*)a[1];
+			r = write((int)a[0], v[0].base, v[0].len);
 			if(r < 0)
 				r = -Ebadf;
 		}
@@ -901,8 +902,8 @@ dosocketcall(ulong argsp)
 		{
 			struct Liovec *v;
 
-			v = (struct Liovec*)a[3];
-			r = read((int)a[2], v[0].base, v[0].len);
+			v = (struct Liovec*)a[1];
+			r = read((int)a[0], v[0].base, v[0].len);
 			if(r < 0)
 				r = -Ebadf;
 		}
@@ -1447,7 +1448,7 @@ dosyscall(Ureg *ur)
 		}
 		break;
 	case 102:	/* socketcall */
-		r = dosocketcall(a1);
+		r = dosocketcall(a1, a2);
 		break;
 	case 220:	/* getdents64 */
 		r = sysgetdents64((int)a1, a2, a3);
