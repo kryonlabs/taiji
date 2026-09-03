@@ -853,8 +853,12 @@ notify(Ureg* ureg)
 		qunlock(&up->debug);
 		pexit(n->msg, n->flag!=NDebug);
 	}
-	sp = ureg->usp;
-	sp -= 256;	/* debugging: preserve context causing problem */
+	if(up->notestack)
+		sp = up->notestack;
+	else{
+		sp = ureg->usp;
+		sp -= 256;	/* debugging: preserve context causing problem */
+	}
 	sp -= sizeof(Ureg);
 if(0) print("%s %lud: notify %.8lux %.8lux %.8lux %s\n",
 	up->text, up->pid, ureg->pc, ureg->usp, sp, n->msg);

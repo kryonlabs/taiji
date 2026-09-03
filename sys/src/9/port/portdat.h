@@ -662,6 +662,7 @@ struct Proc
 	Mach	*mach;		/* machine running this proc */
 	ulong	ldtbase;	/* kernel va of process LDT, or zero (devldt) */
 	int	foreign;	/* runs foreign binaries (devldt mark) */
+	ulong	notestack;	/* top of private note stack, or zero */
 	char	*text;
 	char	*user;
 	char	*args;

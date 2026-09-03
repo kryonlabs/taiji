@@ -22,12 +22,14 @@ enum {
 	Qdir,
 	Qdata,
 	Qmark,
+	Qnstack,
 };
 
 static Dirtab ldttab[] = {
 	".",	{Qdir, 0, QTDIR},	0,	0555,
 	"ldt",	{Qdata, 0},		0,	0600,
 	"mark",	{Qmark, 0},		0,	0600,
+	"notestack",	{Qnstack, 0},	0,	0600,
 };
 
 static Chan*
@@ -85,6 +87,14 @@ ldtwrite(Chan* c, void* a, long n, vlong off)
 		/* mark this process as running foreign binaries so the
 		 * kernel routes its int $0x80 to the note handler */
 		up->foreign = 1;
+		return n;
+	}
+	if(c->qid.path == Qnstack){
+		/* the loader attached its private note stack in user
+		 * space; record the top address so notify() builds note
+		 * frames there instead of below the guest sp */
+		if(n >= 4)
+			up->notestack = ((ulong*)a)[0];
 		return n;
 	}
 	if(c->qid.path == Qdir)

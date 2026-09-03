@@ -109,6 +109,38 @@ int ldtfd = -1;
  * fs-relative accesses would hit low linear memory - this loader's own
  * text.  Point it at the TLS entry like %gs. */
 ulong tlsselector = 0x33;
+
+/* Attach the private note stack and tell the kernel its top address:
+ * without it, notify() builds note frames below the guest sp, and the
+ * lazy PLT resolver - which keeps live working data below its sp
+ * across the syscalls it makes - reads back kernel/host pointers and
+ * jumps to them. */
+static ulong
+attachnotestack(ulong va)
+{
+	int fd;
+	uchar buf[4];
+	ulong top;
+	extern void* segattach(int, char*, void*, ulong);
+
+	if(segattach(0, "shared", (void*)va, 32*1024) == (void*)-1)
+		return 0;
+	top = va + 32*1024;
+	buf[0] = top & 0xFF;
+	buf[1] = (top>>8) & 0xFF;
+	buf[2] = (top>>16) & 0xFF;
+	buf[3] = (top>>24) & 0xFF;
+	fd = open("/dev/notestack", OWRITE);
+	if(fd < 0){
+		if(bind("#z", "/dev", MAFTER) >= 0)
+			fd = open("/dev/notestack", OWRITE);
+	}
+	if(fd < 0)
+		return 0;
+	write(fd, buf, 4);
+	close(fd);
+	return top;
+}
 int tlsfsokay;
 int initedtls;
 
@@ -1338,6 +1370,7 @@ dosyscall(Ureg *ur)
 				}
 				initedtls = 0;
 				listenerfd = -1;
+				attachnotestack(0x5e000000 + (getpid() & 7)*0x10000);
 				if(nr == 120 && (a1 & LcVmnul)){
 					/* a thread: keep sharing the image */
 					if(a2 != 0)
@@ -1674,7 +1707,7 @@ runguest(void)
 
 	/* tell the kernel this process runs foreign binaries (their
 	 * int $0x80 becomes a note instead of a plan9 syscall) */
-	mfd = open("/dev/mark", OWRITE);
+mfd = open("/dev/mark", OWRITE);
 	if(mfd < 0){
 		if(bind("#z", "/dev", MAFTER) >= 0)
 			mfd = open("/dev/mark", OWRITE);
@@ -1682,7 +1715,10 @@ runguest(void)
 	if(mfd >= 0){
 		write(mfd, "1", 1);
 		close(mfd);
-	}else
+	}
+	if(mfd >= 0)
+		attachnotestack(0x5f000000);
+	else
 		fprint(2, "linuxrun: foreign mark failed: %r\n");
 
 	atnotify(traphandler, 1);
