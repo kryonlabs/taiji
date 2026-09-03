@@ -661,6 +661,7 @@ struct Proc
 	char	*kstack;	/* known to l.s */
 	Mach	*mach;		/* machine running this proc */
 	ulong	ldtbase;	/* kernel va of process LDT, or zero (devldt) */
+	int	foreign;	/* runs foreign binaries (devldt mark) */
 	char	*text;
 	char	*user;
 	char	*args;

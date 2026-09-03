@@ -114,6 +114,9 @@ int nguestsegs;
  * "spid fd" at the socket path; connect opens /proc/spid/fd and hands
  * over its own two data pipes; accept reads the request. */
 int listenerfd = -1;	/* read end of the active listener pipe */
+char *genv[] = {
+	"LD_BIND_NOW=1",
+	nil,};
 
 /* epoll: a table of registered fds per epoll fd; wait reports every
  * registered fd ready (the single-threaded server then blocks in the
@@ -289,7 +292,13 @@ loadelf(int fd, Ehdr *eh, ulong base)
 			off = ph[i].vaddr - lo;
 			if(readat(fd, seg+off, ph[i].filesz, ph[i].offset) < 0)
 				fatal("read segment at %#lux: %r", ph[i].offset);
-			if(ph[i].flags & 1){	/* PF_X */
+			if(ph[i].flags & 1){	/* PF_X: rewrite to ud2 so
+						 * the trap carries a clean
+						 * register frame; the kernel
+						 * gate covers the int $0x80
+						 * sites we cannot rewrite
+						 * (ld.so bootstrap, mmap'd
+						 * libraries) */
 				for(k = 0; k+1 < (int)ph[i].filesz; k++){
 					uchar *q = seg + off + k;
 
@@ -325,7 +334,8 @@ buildstack(int nargs, char **args)
 	ulong sp, strp;
 	ulong *vec;
 	ulong argv[16];
-	int i, naux, nvec;
+	ulong enva[16];
+	int i, ne, naux, nvec;
 
 	if(nargs > 15)
 		nargs = 15;
@@ -339,6 +349,16 @@ buildstack(int nargs, char **args)
 		strcpy((char*)st + (strp - Stackbase), args[i]);
 		argv[i] = strp;
 	}
+	for(ne = 0; genv[ne] != nil; ne++){
+		int l;
+
+		l = strlen(genv[ne]) + 1;
+		strp -= l;
+		strcpy((char*)st + (strp - Stackbase), genv[ne]);
+		enva[ne] = strp;
+	}
+	enva[ne] = 0;
+
 	execfnva = argv[0];
 	platformva = strp - 8;
 	strcpy((char*)st + (platformva - Stackbase), "i686");
@@ -349,7 +369,7 @@ buildstack(int nargs, char **args)
 	/* PHDR PAGESZ PHNUM BASE ENTRY CLKTCK PHENT FLAGS UID EUID
 	 * GID EGID HWCAP SECURE SYSINFO RANDOM EXECFN PLATFORM NULL */
 	naux = 19;
-	nvec = 1 + nargs + 1 + 1 + 2*naux;
+	nvec = 1 + nargs + 1 + 1 + ne + 2*naux;
 	sp = (randva - 16) & ~15UL;
 	sp = (sp - nvec*4) & ~15UL;
 	vec = (ulong*)(st + (sp - Stackbase));
@@ -357,8 +377,10 @@ buildstack(int nargs, char **args)
 	for(i = 0; i < nargs; i++)
 		vec[1+i] = argv[i];
 	vec[1+nargs] = 0;
-	vec[2+nargs] = 0;
-	i = 3+nargs;
+	for(i = 0; i < ne; i++)
+		vec[2+nargs+i] = enva[i];
+	vec[2+nargs+ne] = 0;
+	i = 3+nargs+ne;
 	if(phdrmode != 2){
 		vec[i++] = 3; vec[i++] = phdrva;
 		vec[i++] = 5; vec[i++] = nphhdrs;
@@ -523,10 +545,14 @@ sysmmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong off)
 		}
 	}
 	if(!(flags & 0x20)){	/* not MAP_ANONYMOUS: fill from the file */
+		uchar *p;
+		ulong k;
+
 		if(fd > 0x10000)
 			return -Ebadf;
 		if(readat((int)fd, (void*)va, len, off) < 0)
 			return -Ebadf;
+		/* no rewriting: the kernel gates int $0x80 from guest procs */
 	}
 	if(verbose)
 		fprint(2, "linuxrun: mmap addr=%#lux len=%#lux flags=%#lux fd=%d off=%#lux -> %#lux\n",
@@ -1305,8 +1331,47 @@ dosyscall(Ureg *ur)
 				}
 				initedtls = 0;
 				listenerfd = -1;
-				if(nr == 120 && (a1 & LcVmnul) && a2 != 0)
-					ur->sp = a2;
+				if(nr == 120 && (a1 & LcVmnul)){
+					/* a thread: keep sharing the image */
+					if(a2 != 0)
+						ur->sp = a2;
+				}else{
+					/* a fork: the child must NOT share the
+					 * parent's guest memory (libc mutates
+					 * its own state after fork) - take a
+					 * private snapshot of every segment */
+					int s;
+					ulong va, len;
+					uchar *tmp;
+
+					for(s = 0; s < nguestsegs; s++){
+						va = guestsegs[s][0];
+						len = guestsegs[s][1];
+						if(va == Stackbase)
+							continue;	/* stack handled below */
+						tmp = malloc(len);
+						if(tmp == nil)
+							exits("fork snapshot");
+						memmove(tmp, (void*)va, len);
+						segdetach((void*)va);
+						if(segattach(0, "memory", (void*)va, len) == (void*)-1)
+							exits("fork attach");
+						memmove((void*)va, tmp, len);
+						free(tmp);
+					}
+					/* the stack segment too (excluded above) */
+					va = Stackbase;
+					len = Stacksize;
+					tmp = malloc(len);
+					if(tmp == nil)
+						exits("fork stack");
+					memmove(tmp, (void*)va, len);
+					segdetach((void*)va);
+					if(segattach(0, "memory", (void*)va, len) == (void*)-1)
+						exits("fork attach");
+					memmove((void*)va, tmp, len);
+					free(tmp);
+				}
 				ur->ax = 0;
 				return 0;
 			}else{
@@ -1531,10 +1596,28 @@ traphandler(void *v, char *msg)
 	Ureg *ur;
 	uchar *pc;
 
-	USED(msg);
 	if(v == nil)
 		return 0;
 	ur = v;
+	if(msg != nil && strcmp(msg, "linux sys") == 0){
+		/* the kernel gates guest int $0x80 here (devldt procs) */
+		if(!started){
+			started = 1;
+			ur->pc = entrypc;
+			ur->sp = stacktop;
+			ur->ax = 0;
+			ur->bx = 0;
+			ur->cx = 0;
+			ur->dx = 0;
+			ur->si = 0;
+			ur->di = 0;
+			ur->bp = 0;
+			return 1;
+		}
+		ur->ax = dosyscall(ur);
+		ur->pc += 2;
+		return 1;
+	}
 	if(ur->trap != TrapUD){
 		/* dump guest faults so the caller of a bad call is visible */
 		if(started){
@@ -1578,6 +1661,20 @@ static void
 runguest(void)
 {
 	void (*f)(void);
+	int mfd;
+
+	/* tell the kernel this process runs foreign binaries (their
+	 * int $0x80 becomes a note instead of a plan9 syscall) */
+	mfd = open("/dev/mark", OWRITE);
+	if(mfd < 0){
+		if(bind("#z", "/dev", MAFTER) >= 0)
+			mfd = open("/dev/mark", OWRITE);
+	}
+	if(mfd >= 0){
+		write(mfd, "1", 1);
+		close(mfd);
+	}else
+		fprint(2, "linuxrun: foreign mark failed: %r\n");
 
 	atnotify(traphandler, 1);
 	f = (void(*)(void))trapinsn;

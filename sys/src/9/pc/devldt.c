@@ -21,11 +21,13 @@
 enum {
 	Qdir,
 	Qdata,
+	Qmark,
 };
 
 static Dirtab ldttab[] = {
 	".",	{Qdir, 0, QTDIR},	0,	0555,
 	"ldt",	{Qdata, 0},		0,	0600,
+	"mark",	{Qmark, 0},		0,	0600,
 };
 
 static Chan*
@@ -79,6 +81,12 @@ ldtwrite(Chan* c, void* a, long n, vlong off)
 	int i, nent;
 	ulong *tab;
 
+	if(c->qid.path == Qmark){
+		/* mark this process as running foreign binaries so the
+		 * kernel routes its int $0x80 to the note handler */
+		up->foreign = 1;
+		return n;
+	}
 	if(c->qid.path == Qdir)
 		error(Eperm);
 	if(n <= 0)

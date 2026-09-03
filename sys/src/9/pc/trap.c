@@ -329,6 +329,18 @@ trap(Ureg* ureg)
 	if(user){
 		up->dbgreg = ureg;
 		cycles(&up->kentry);
+		/* Foreign binaries (linuxrun, devldt) issue int $0x80,
+		 * which this kernel has no DPL-3 gate for: it lands here
+		 * as a general-protection trap.  Deliver it to their note
+		 * handler, which emulates the syscall and advances. */
+		if(up->ldtbase != 0 && ureg->trap == 13
+		&& okaddr(ureg->pc, 2, 0)
+		&& *(uchar*)ureg->pc == 0xcd
+		&& *(uchar*)(ureg->pc+1) == 0x80){
+			if(!postnote(up, 0, "linux sys", NUser))
+				pexit("suicide", 0);
+			return;
+		}
 	}
 
 	clockintr = 0;
@@ -361,6 +373,15 @@ trap(Ureg* ureg)
 		}
 	}
 	else if(vno < nelem(excname) && user){
+		/* foreign binaries' int $0x80 lands as trap 13 with no
+		 * DPL-3 gate for it: hand it to their note handler */
+		if(vno == 13 && up->foreign
+		&& okaddr(ureg->pc, 2, 0)
+		&& *(uchar*)ureg->pc == 0xcd
+		&& *(uchar*)(ureg->pc+1) == 0x80){
+			postnote(up, 0, "linux sys", NUser);
+			return;
+		}
 		spllo();
 		snprint(buf, sizeof buf, "sys: trap: %s", excname[vno]);
 		postnote(up, 1, buf, NDebug);
@@ -669,6 +690,7 @@ syscall(Ureg* ureg)
 		panic("syscall: cs 0x%4.4luX", ureg->cs);
 
 	cycles(&up->kentry);
+
 
 	m->syscall++;
 	up->insyscall = 1;
